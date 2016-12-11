@@ -93,39 +93,39 @@ module ACT
   (is : ^ I -:> Syn)
   (wk : ^ I -:> (I o su))
   where
-  shf : forall {m n} -> (Env (I n) m) -> Env (I (su n)) m
+  shf : forall {m n} -> (Env m (I n)) -> Env m (I (su n))
   shf = env wk
-  wkn : forall {m n} -> (Env (I n) m) -> Env (I (su n)) (su m)
-  wkn g = shf g -, vi ze
-  ida : forall {n} -> Env (I n) n
-  ida {ze}   = []
+  wkn : forall {m n} -> (Env m (I n)) -> Env (su m) (I (su n))
+  wkn g = shf g , vi ze
+  ida : forall {n} -> Env n (I n)
+  ida {ze}   = <>
   ida {su n} = wkn ida
-  act : forall {m n d} -> (Env (I n) m) -> Tm m d -> Tm n d
+  act : forall {m n d} -> (Env m (I n)) -> Tm m d -> Tm n d
   act g [ t ]      = [ act g t ]
   act g (U h)      = U h
   act g (Pi q S T) = Pi q (act g S) (act (wkn g) T)
   act g (la t)     = la (act (wkn g) t)
   act g (t :: T)   = act g t :: act g T
-  act g (# i)      = is (proj g i)
+  act g (# i)      = is (proj i g)
   act g (f $ s)    = act g f $ act g s
 
 module REN = ACT Fin id # su
-ren : forall {m n d} -> (Env (Fin n) m) -> Tm m d -> Tm n d
+ren : forall {m n d} -> (Env m (Fin n)) -> Tm m d -> Tm n d
 ren = REN.act
 
-wkr : forall {m n} -> m <= n -> Env (Fin n) m
-wkr {ze} mn = []
+wkr : forall {m n} -> m <= n -> Env m (Fin n)
+wkr {ze} mn = <>
 wkr {su m} {ze} ()
-wkr {su m} {su n} mn = REN.shf (wkr mn) -, fin m mn
+wkr {su m} {su n} mn = REN.shf (wkr mn) , fin m mn
 
 open MODAL Nat<=
 open Cat _ Nat<=
 
-sucr : forall {n} -> Env (Fin (su n)) n
+sucr : forall {n} -> Env n (Fin (su n))
 sucr = let open REN in shf ida
 
 module SUB = ACT Syn # id (ren sucr)
-sub : forall {m n d} -> (Env (Syn n) m) -> Tm m d -> Tm n d
+sub : forall {m n d} -> (Env m (Syn n)) -> Tm m d -> Tm n d
 sub = SUB.act
 
 Cx : Nat -> Set
@@ -141,7 +141,7 @@ projT (_ , (_ , S)) ze = ren sucr S
 projT (G , _) (su i) = ren sucr (projT G i)
 
 _%_ : forall {n d} -> Tm (su n) d -> Tm n syn -> Tm n d
-t % e = sub (SUB.ida -, e) t
+t % e = sub (SUB.ida , e) t
 
 data Reds {n} : forall {d} -> Tm n d -> Tm n d -> Set where
 

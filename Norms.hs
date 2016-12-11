@@ -2,6 +2,8 @@
 
 module Norms where
 
+import Control.Monad
+
 data Nm
   = C (Can Nm)  -- canonical construction
   | F Nm [Nm]   -- abstraction with incomplete environment
@@ -19,6 +21,7 @@ data Can t
   = Set | Pi t t | Nat | Inx t :% t
   | Ze | Su t | Em | Pa t t | Va t | Ap t t | La t
   -- the following must be banished by quote
+  | Io t
   | Kf t    -- K t is the constant function returning t
   deriving (Show, Eq, Functor)
 
@@ -37,6 +40,7 @@ pattern ZE      = C Ze
 pattern SU n    = C (Su n)
 pattern EM      = C Em
 pattern s :& t  = C (Pa s t)
+pattern IO t    = C (Io t)
 pattern VA i    = C (Va i)
 pattern AP f s  = C (Ap f s)
 pattern LA t    = C (La t)
@@ -57,12 +61,36 @@ sMa :: Cop -> Cop
 sMa Id = Id
 sMa c  = Ma c
 
+sSb :: Nm -> Nm -> Cop
+sSb n (IO _) = Id
+sSb n sg     = case mkThin n 0 sg of
+  Just rh -> Ma rh
+  Nothing -> Sb n sg
+
+mkThin :: Nm -> Int -> Nm -> Maybe Cop
+mkThin m x (yz :& VA y) = do
+      y <- mkNum y
+      guard (y >= x)
+      c <- mkThin m (y+1) yz
+      return (iterate Sh (sMa c) !! (y - x))
+mkThin (SU m) x EM = Sh <$> mkThin m x EM
+mkThin ZE x EM = return Id
+mkThin _ 0 (e :$ IdSub :! Id) = return Id
+mkThin _ 0 (e :$ IdSub :! Ma Id) = return Id
+mkThin _ 0 (e :$ IdSub :! Ma (Ma c)) = return c
+mkThin m x (e :$ IdSub :! Ma (Ma (Sh c))) = mkThin m (x - 1) (e :$ IdSub :! sMa (sMa c))
+mkThin _ _ _ = Nothing
+mkNum :: Nm -> Maybe Int
+mkNum ZE = Just 0
+mkNum (SU x) = (1+) <$> mkNum x
+mkNum _ = Nothing
+    
 -- eval for Cop pushes structurally
 cop :: [Nm] -> Cop -> Cop
 cop g Id       = Id
 cop g (Ma c)   = sMa (cop g c)
 cop g (Sh c)   = Sh (cop g c)
-cop g (Sb n s) = Sb (eval g n) (eval g s)
+cop g (Sb n s) = sSb (eval g n) (eval g s)
 -- but could potentially try to turn substitutions into renamings;
 -- not doing so is a potential completeness hole
 
@@ -86,27 +114,28 @@ Sb n sg >-> d = Sb (cod n d) (sg -! sMa d) where -- we know d isn't Id
   rod n Id = n
   rod (SU n) (Ma d) = SU (rod n d)
   rod n (Sh d) = SU (rod n d)
-Ma c >-> Sb n sg = Sb n (c <? sg)
+Ma c >-> Sb n sg = sSb n (c <? sg)
 
 -- weakening of substitutions is a mere macro
 wkSub :: Nm -> Nm
+wkSub (IO n) = IO (SU n)
 wkSub sg = (sg -! Ma (Ma (Sh Id))) :& VA ZE
 -- note (further down) that it preserves identity by definition
 -- but must check it preserves composition
 
-infixl 4 -$!, -!
+infixl 4 -!
 
 -- here's where identity substitution precomposes
-(-$!) :: Ne -> Cop -> Nm
-e :$ IdSub -$! Ma (Sb _ sg) = sg
-e -$! c = e :! c
+-- (-$!) :: Ne -> Cop -> Nm
+-- e :$ IdSub -$! Ma (Sb _ sg) = sg
+-- e -$! c = e :! c
 
 
 -- now let's make compositional operators act
 (-!) :: Nm -> Cop -> Nm
 
 -- yer main man
-(e :! c) -! d = e -$! (c >-> d)
+(e :! c) -! d = e :! (c >-> d)
 
 -- some basics
 t -! Id = t
@@ -115,7 +144,14 @@ i -! Sh c = SU (i -! c)
 -- mapping a compositional operator over an environment
 EM        -! Ma c = EM
 (xz :& x) -! Ma c = (xz -! Ma c) :& (x -! c)
-
+IO n      -! Ma Id = IO n
+IO n      -! Ma (Ma Id) = IO n
+IO n      -! Ma (Sb _ sg) = sg
+IO n      -! Ma (Ma c) = go n c where
+  go ZE _ = EM
+  go (SU n) c = go n (Sh c) :& VA (n -! c)
+  go (e :! Id) c = e :$ IdSub :! Ma (Ma c)
+  
 -- weakening a thinning on a variable
 ZE   -! Ma c = ZE
 SU i -! Ma c = SU (i -! c)
@@ -128,7 +164,7 @@ LA t    -! Ma c = LA (t -! Ma (Ma c))
 -- hitting a term with a substitution
 VA i     -! Sb n sg     = i -$ Get (TM n) sg
 AP f s   -! c@(Sb n sg) = AP (f -! c) (s -! c)
-LA t     -! Sb n sg     = LA (t -! Sb (SU n) (wkSub sg))
+LA t     -! Sb n sg     = LA (t -! sSb (SU n) (wkSub sg))
 
 newtype Hide x = Hide x
 instance Show (Hide x) where
@@ -173,12 +209,15 @@ K t      -$ A _ = t
 -- projecting from environments
 (tz :& t) -$ Top = t
 (tz :& t) -$ Pop = tz
+IO (SU _) -$ Top = VA ZE
+IO (SU n) -$ Pop = IO n -! Ma (Ma (Sh Id))
 
 -- pulling mapping out through projection
-(e :! Ma c) -$ Top = e :$ Top -$! Id -! c
-(e :! Ma c) -$ Pop = e :$ Pop -$! Id -! Ma c
+(e :! Ma c) -$ Top = e :$ Top :! Id -! c
+(e :! Ma c) -$ Pop = e :$ Pop :! Id -! Ma c
 
 -- projection from environments
+i        -$ Get _ (IO _) = i
 i        -$ Get t (e :! Ma c) = (i -$ Get s (e :! Id)) -! c
   where ENV s _ = syn e
 ZE       -$ Get t xz = xz -$ Top
@@ -186,8 +225,7 @@ SU i     -$ Get t xz = i -$ Get t (xz -$ Pop)
 (e :! c) -$ Get t xz = (e :$ Get t (c <? xz)) :! Id
 
 -- identity substitution
-ZE   -$ IdSub = EM
-SU n -$ IdSub = wkSub (n -$ IdSub)  -- preserved by weakening, by definition
+n -$ IdSub = IO n
 
 -- quote (root, level) turns every P that's at least the root back into a V
 quote :: (Int, Int) -> Nm -> Nm -> Nm
@@ -211,6 +249,7 @@ quote rl NAT (SU n) = C $ Su (quote rl NAT n)
 -- quoting object variables
 quote rl (FIN (SU n)) ZE = ZE
 quote rl (FIN (SU n)) (SU i) = SU (quote rl (FIN n) i)
+quote rl (FIN _) (e :! c) = quone rl e :! c
 
 -- quoting object terms
 quote rl (TM n) (VA i) = VA (quote rl (FIN n) i)
@@ -221,6 +260,7 @@ quote rl (TM n) (LA t) = LA (quote rl (TM (SU n)) t)
 quote rl (ENV t ZE)     _ = EM
 quote rl (ENV t (SU n)) g = 
   quote rl (ENV t n) (g -$ Pop) :& quote rl t (g -$ Top)
+quote el (ENV _ (e :! Id)) (IO _) = e :$ IdSub :! Id
 
 -- quoting the identity substitution composed (can this happen?)
 quote rl (ENV t n) (e :$ IdSub :! Ma (Sb _ sg)) =
@@ -248,10 +288,8 @@ quote rl t s = error ("QUOTE: " ++ show t ++ " :> " ++ show s)
 -- quoting the terms embedded in a compositional operator
 quosub :: (Int, Int) -> Nm -> Nm -> Cop -> Cop
 quosub rl _ _ Id = Id
-quosub rl m n (Sb _ tz)
-  | eq rl NAT m n && eq rl (SUB n n) (n -$ IdSub) tz = Id
-  | otherwise = Sb (quote rl NAT n) (quote rl (SUB m n) tz)
-quosub rl m n (Ma c) = Ma c
+quosub rl m n (Sb _ tz) = sSb (quote rl NAT n) (quote rl (SUB m n) tz)
+quosub rl m n (Ma c) = sMa c
 quosub rl m n c =
   error ("QUOSUB: " ++ show m ++ " " ++ show n ++ " " ++ show c)
 
@@ -300,3 +338,5 @@ w'tsg = (t -! Sb m sg) -! Ma (Sh Id)
 wtwsg = wt -! Sb (SU m) wsg
 
 -- quote (4, 4) (TM (SU m)) w'tsg == quote (4, 4) (TM (SU m)) wtwsg
+
+myv = 4 <:> FIN (SU (SU n))
