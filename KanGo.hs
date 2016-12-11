@@ -58,6 +58,7 @@ data Syn :: CX -> SC -> * where
   (:&)   :: Syn g TM -> Syn g TM -> Syn g TM
 
   (:-:)  :: Syn g TM -> Syn g TM -> Syn g TM
+  Conn   :: Syn g TM -> Triple (Syn g TM) -> Syn g TM -> Syn g TM
   Path   :: Bnd g PT -> Syn g TM
   KanT   :: KAN (Syn g) -> Syn g TM
 
@@ -109,6 +110,7 @@ act f (B q s t)    = B q <$> act f s <*> bact f t
 act f (L t)        = L <$> bact f t
 act f (s :& t)     = (:&) <$> act f s <*> act f t
 act f (s :-: t)    = (:-:) <$> act f s <*> act f t
+act f (Conn s q t) = Conn <$> act f s <*> traverse (act f) q <*> act f t
 act f (Path t)     = Path <$> bact f t
 act f (KanT k)     = KanT <$> kact f k
 act f (E e)        = E <$> act f e
@@ -159,6 +161,7 @@ data Sem :: SC -> * where
   (::&)  :: Sem TM -> Sem TM -> Sem TM
 
   (::-:) :: Sem TM -> Sem TM -> Sem TM
+  VConn  :: Sem TM -> Triple (Sem TM) -> Sem TM -> Sem TM
   VPath  :: Clo PT -> Sem TM
   VKanT  :: KAN Sem -> Sem TM
 
@@ -215,6 +218,7 @@ eval g (B q s t) = VB q <$> eval g s <*> clo g t
 eval g (L b) = VL <$> clo g b
 eval g (s :& t) = (::&) <$> eval g s <*> eval g t
 eval g (s :-: t) = (::-:) <$> eval g s <*> eval g t
+eval g (Conn s q t) = VConn <$> eval g s <*> traverse (eval g) q <*> eval g t
 eval g (Path b) = VPath <$> clo g b
 eval g (KanT k) = kan =<< keval g k
 eval g (E e) = fst <$> eval g e
@@ -223,7 +227,12 @@ eval _ (P i@(Dim _ _)) = pure (dim i)
 eval _ (P x@(Par i t _)) = pure (N (X x), t)
 eval g (t ::: tT) = (,) <$> eval g t <*> eval g tT
 eval g (f :$ s) = join (apf <$> eval g f <*> eval g s)
-eval g (f :. s) = (, VType) <$> join ((apa . triple) <$> eval g f <*> eval g s)
+eval g (f :. p) = do
+  qQ@(vq, vQ) <- eval g f
+  vp <- eval g p
+  case vQ of
+    _ ::-: _ -> (, VType) <$> apa (triple qQ) vp
+    VConn vs vP vt -> (,) <$> apa (Tr vs vq vt) vp <*> apa vP vp
 eval g (e :@ b) = join (field b <$> eval g e)
 eval g (r :^ q) = do
   r <- eval g r
@@ -287,6 +296,14 @@ transport vr p = underPT $ \ h -> do
           transport vt0 =<< (Tr vT0 <$> path "i" vT <*> vT (VI B1))
       (vS0 ::-: vT0, sS :-: tT, vS1 ::-: vT1) -> path "j" $ \ j ->
         kan (KAN (Tr vS0 (synpa sS) vS1) (Tr vT0 (synpa tT) vT1) vr (VI B1) j)
+      (VConn vs0 vQ0 vt0, Conn s qQ t, VConn vs1 vQ1 vt1) -> do
+        let vQ i = traverse (eval (E0 :< i)) qQ
+        path "j" $ \ j -> do
+          vp0 <- apa (Tr vs0 vr vt0) j
+          vQj <- path "i" $ \ i -> do
+            vQi <- vQ i
+            apa vQi j
+          transport vp0 =<< (Tr <$> apa vQ0 j <*> pure vQj <*> apa vQ1 j)
       (_, KanT k@(KAN s0 s1 b v h), _) -> do -- faces may be degenerate...
         vk0 <- keval (E0 :< VI B0) k  -- ...so find them by instantiation
         vk1 <- keval (E0 :< VI B1) k
@@ -381,6 +398,7 @@ pteq :: Sem PT -> Sem PT -> Bool
 pteq (VI b) (VI c) = b == c
 pteq (VMux i p0 p1) (VMux j q0 q1) =
   i == j && pteq p0 q0 && pteq p1 q1
+pteq _ _ = False
 
 data QJ :: CX -> * where
   Q0 :: QJ C0
@@ -413,6 +431,9 @@ quote q VType (VB z vS cT)  = B z <$> quote q VType vS <*>
     vx <- eval E0 (P x)
     vT <- stan cT vx
     bnd (nomC cT) <$> quote (q :\\ x) VType vT)
+quote q VType (vS ::-: vT) = (:-:) <$> quote q VType vS <*> quote q VType vT
+quote q VType (VConn vs vP vt) =
+  Conn <$> quote q (point0 vP) vs <*> quotr q vP <*> quote q (point1 vP) vt
 quote q VType (VKanT k) = KanT <$> quoka q k
 quote q vF@(VB Pi vS cT) vf = underEL vS $ \ x -> do
     (vt, vT) <- apf (vf, vF) (N (X x))
@@ -425,9 +446,14 @@ quote q vP@(VB Sg vS cT) vp = do
   (vt, vT) <- field B1 (vp, vP)
   (:&) <$> quote q vS vs <*> quote q vT vt
 quote q (vS ::-: vT) vq = underPT $ \ i -> do
-  vi <- eval E0 (P i)
-  vS <- apa (Tr vS vq vT) vi
+  vS <- apa (Tr vS vq vT) =<< eval E0 (P i)
   Path <$> (bnd "i" <$> quote (q :\\ i) VType vS)
+quote q (VConn vs vQ vt) vq = underPT $ \ i -> do
+  vi <- eval E0 (P i)
+  vP <- apa vQ vi
+  vp <- apa (Tr vs vq vt) vi
+  Path <$> (bnd "i" <$> quote (q :\\ i) vP vp)
+  
 quote q _ (N e) = E <$> (fst <$> quoel q e)
 quote q t _ = \ i -> error $ "YUK! " ++ display B1 q (quote q VType t i)
 
@@ -449,8 +475,10 @@ quoel q (vf ::$ vs) = do
   (,) <$> ((f :$) <$> quote q vS vs)
       <*> stan cT (vs, vS)
 quoel q (vf ::. vp) = do
-  (f, vS ::-: vT) <- quoel q vf
-  pure $ (f :. quopt q vp, VType)
+  (f, vF) <- quoel q vf
+  case vF of
+    vS ::-: vT -> pure $ (f :. quopt q vp, VType)
+    VConn vs vP vt -> (f :. quopt q vp,) <$> apa vP vp
 quoel q (ve ::@ b) = do
   (e, vE@(VB Sg vS cT)) <- quoel q ve
   (_, vT) <- field b (N ve, vE)
@@ -489,15 +517,18 @@ display _ q (Mux i j k) = concat
 display _ q (B b s (K t)) = concat
   [display B0 q s, " ", show b, " ", display B1 q t]
 display _ q (B b s (R x t)) = concat
-  ["(", x, " : ", display B1 q s, ") ", show b, " " ,display B1 (glomE q x) t]
+  ["(", y, " : ", display B1 q s, ") ", show b, " " ,display B1 (glomE q y) t]
+  where y = freshen q x
 display _ q (L (K t)) = "\\ _ -> " ++ display B1 q t
-display _ q (L (R x t)) = concat
-  ["\\ ", x, " -> ", display B1 (glomE q x) t]  -- ditto
+display _ q (L (R x t)) = concat ["\\ ", y, " -> ", display B1 (glomE q y) t]
+  where y = freshen q x
 display _ q (s :& t) = display B0 q s ++ ", " ++ display B1 q t
 display _ q (s :-: t) = display B0 q s ++ " - " ++ display B0 q t
+display _ q (Conn s p t) = concat
+  [display B0 q s, " -{", displayT q p, "}- ", display B0 q t]
 display _ q (Path (K _)) = "."
-display _ q (Path (R x t)) = concat
-  ["\\ ", x, " -> ", display B1 (glomP q x) t]
+display _ q (Path (R x t)) = concat ["\\ ", y, " -> ", display B1 (glomP q y) t]
+  where y = freshen q x
 display _ q (KanT k) = displayK q k
 display _ q (s ::: t) = display B0 q s ++ " : " ++ display B1 q t
 display _ q (f :$ s) = display B1 q f ++ " " ++ display B0 q s
@@ -531,10 +562,10 @@ freshen q x = if nameUsed q x then go 0 else x where
     xi = x ++ show i
 
 glomE :: QJ g -> String -> QJ (g :\ EL)
-glomE q x = q :\\ Par 0 VType (freshen q x)  -- yuk
+glomE q x = q :\\ Par 0 VType x  -- yuk
 
 glomP :: QJ g -> String -> QJ (g :\ PT)
-glomP q x = q :\\ Dim 0 (freshen q x)  -- yuk
+glomP q x = q :\\ Dim 0 x  -- yuk
 
 data Expt
   = (String, Syn C0 TM) :/ (FV EL -> Expt)
@@ -567,3 +598,17 @@ expt0 =
    (E (P f) :^ Tr (B Pi (E (P xX)) (K (E (P yY))))
                   (Path (R "i" (B Pi (E (P xXQ :. V V0)) (K (E (P yYQ :. V V0))))))
                   (B Pi (E (P xX')) (K (E (P yY')))))
+
+expt1 :: Expt
+expt1 =
+  ("X", Type) :/ \ xX -> ("Y", Type) :/ \ yY ->
+  ("XY", E (P xX) :-: E (P yY)) :/ \ qXY ->
+  ("x", E (P xX)) :/ \ x ->
+  Go $ Path (R "i" (E (E (P x) :^
+             Tr (E (P xX))
+                (Path (R "j" (E (P qXY :. Mux (V V0) (I B0) (V (VS V0))))))
+                (E (P qXY :. V V0)))))
+       :::
+       Conn (E (P x))
+            (Tr (E (P xX)) (E (P qXY)) (E (P yY)))
+            (E (E (P x) :^ Tr (E (P xX)) (E (P qXY)) (E (P yY))))
