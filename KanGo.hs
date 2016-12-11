@@ -287,7 +287,9 @@ transport vr p = underPT $ \ h -> do
           transport vt0 =<< (Tr vT0 <$> path "i" vT <*> vT (VI B1))
       (vS0 ::-: vT0, sS :-: tT, vS1 ::-: vT1) -> path "j" $ \ j ->
         kan (KAN (Tr vS0 (synpa sS) vS1) (Tr vT0 (synpa tT) vT1) vr (VI B1) j)
-      (VKanT vk0, KanT (KAN s0 s1 b v h), VKanT vk1) -> do
+      (_, KanT k@(KAN s0 s1 b v h), _) -> do -- faces may be degenerate...
+        vk0 <- keval (E0 :< VI B0) k  -- ...so find them by instantiation
+        vk1 <- keval (E0 :< VI B1) k
         vs0 <- kanV B0 vk0 vr   -- down the left face...
         let pB = VPath (VR E0 "i" (E ((b ::: (point0 s0 :-: point0 s1)) :. h)))
         -- ...across the base...
@@ -303,13 +305,13 @@ kanB (KAN (Tr vS _ _) (Tr vT _ _) b _ _) = Tr vS b vT
 -- trying to ship a value from a point in a Kan square
 --   (B0) down to the base
 --   (B1) or up from the base
+-- must do same degeneracy tests as kan, to keep sync
 kanV :: Bit -> KAN Sem -> Sem TM -> Int -> Sem TM
 kanV _ k v | pteq (vert k) (VI B0) = pure v   -- on the base already
 kanV du k v = case horiz k of
     VI b -> transport v =<< seg du (side b k)   -- on one side or the other
     _ -> do
       b <- (&&) <$> degenerate (side0 k) <*> degenerate (side1 k)
-                -- we will often know this not to be the case
       pure $ if b then v else N (VKanV du k v)
   where
     seg B0 s = segment s (vert k) (VI B0)
