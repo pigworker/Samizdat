@@ -17,8 +17,15 @@ data Var :: CX -> SC -> * where
   V0 :: Var (g :\ s) s
   VS :: Var g t -> Var (g :\ s) t
 
-data Quant = Pi | Sg deriving (Show, Eq)
-data Bit = B0 | B1 deriving (Show, Eq)
+data Quant = Pi | Sg deriving Eq
+instance Show Quant where
+  show Pi = "->"
+  show Sg = "*"
+
+data Bit = B0 | B1 deriving Eq
+instance Show Bit where
+  show B0 = "0"
+  show B1 = "1"
 
 data Triple x = Tr  {
   point0 :: x       ,
@@ -68,14 +75,14 @@ data Syn :: CX -> SC -> * where
   KanV   :: Bit -> KAN (Syn g) -> Syn g TM -> Syn g EL
 
 data Bnd :: CX -> SC -> * where
-  R :: Syn (g :\ b) TM -> Bnd g b
+  R :: String -> Syn (g :\ b) TM -> Bnd g b
   K :: Syn g TM -> Bnd g b
 
-bnd :: Syn (g :\ b) TM -> Bnd g b
-bnd t = case dep b of
+bnd :: String -> Syn (g :\ b) TM -> Bnd g b
+bnd x t = case dep b of
     Left t  -> K t
     Right _ -> b
-  where b = R t
+  where b = R x t
   -- could add thickening?
 
 class Kit (t :: CX -> SC -> *) where
@@ -122,7 +129,7 @@ kact f (KAN s0 s1 b v h) =
 bact :: forall f t g d c. (Applicative f, Kit t) =>
        (forall b. Var g b -> f (t d b)) ->
        Bnd g c -> f (Bnd d c)
-bact f (R t) = R <$> act g t where
+bact f (R x t) = R x <$> act g t where
   g :: forall b. Var (g :\ c) b -> f (t (d :\ c) b)
   g V0 = pure vze
   g (VS i) = wk <$> f i
@@ -132,8 +139,8 @@ ren :: (forall b. Var g b -> Var d b) -> Syn g b -> Syn d b
 ren f = runIdentity . act (Identity . f)
 
 dep :: Bnd g b -> Either (Syn g TM) (Syn (g :\ b) TM)
-dep (K t) = Left t
-dep (R t) = case act str t of
+dep (K t)   = Left t
+dep (R x t) = case act str t of
     Just t  -> Left t
     Nothing -> Right t
   where
@@ -166,11 +173,15 @@ data Sem :: SC -> * where
   VKanV  :: Bit -> KAN Sem -> Sem TM -> Sem EL
 
 data Clo :: SC -> * where
-  VR :: Env g -> Syn (g :\ b) TM -> Clo b
+  VR :: Env g -> String -> Syn (g :\ b) TM -> Clo b
   VK :: Sem TM -> Clo b
 
+nomC :: Clo b -> String
+nomC (VR _ x _) = x
+nomC _ = "x"
+
 stan :: Clo b -> Val b -> Int -> Val TM
-stan (VR g b) v = eval (g :< v) b
+stan (VR g _ b) v = eval (g :< v) b
 stan (VK t) _   = pure t
 
 data Env :: CX -> * where
@@ -183,12 +194,15 @@ type family Val (c :: SC) :: * where
   Val TM = Sem TM
 
 data FV :: SC -> * where
-  Dim :: Int -> FV PT
-  Par :: Int -> Sem TM -> FV EL
+  Dim :: Int -> String -> FV PT
+  Par :: Int -> Sem TM -> String -> FV EL
+
+instance Ord (FV PT) where
+  compare (Dim i _) (Dim j _) = compare i j
 
 instance Eq (FV c) where
-  Dim i   == Dim j    = i == j
-  Par i _ == Par j _  = i == j
+  Dim i _   == Dim j _    = i == j
+  Par i _ _ == Par j _ _  = i == j
 
 dim :: FV PT -> Val PT
 dim i = VMux i (VI B0) (VI B1)
@@ -205,8 +219,9 @@ eval g (Path b) = VPath <$> clo g b
 eval g (KanT k) = kan =<< keval g k
 eval g (E e) = fst <$> eval g e
 eval g (V i) = pure (proj g i)
-eval _ (P i@(Dim _)) = pure (dim i)
-eval _ (P x@(Par i t)) = pure (N (X x), t)
+eval _ (P i@(Dim _ _)) = pure (dim i)
+eval _ (P x@(Par i t _)) = pure (N (X x), t)
+eval g (t ::: tT) = (,) <$> eval g t <*> eval g tT
 eval g (f :$ s) = join (apf <$> eval g f <*> eval g s)
 eval g (f :. s) = (, VType) <$> join ((apa . triple) <$> eval g f <*> eval g s)
 eval g (e :@ b) = join (field b <$> eval g e)
@@ -223,32 +238,32 @@ keval g (KAN s0 s1 b v h) =
   KAN <$> traverse (eval g) s0 <*> traverse (eval g) s1 <*> eval g b
       <*> eval g v <*> eval g h
 
-lam :: Sem TM -> (Sem TM -> Int -> Sem TM) -> Int -> Sem TM
-lam (VB Pi vS cT) f = underEL vS $ \ x -> do
+lam :: Sem TM -> String -> (Sem TM -> Int -> Sem TM) -> Int -> Sem TM
+lam (VB Pi vS cT) n f = underEL vS $ \ x -> do
   let vx = N (X x)
   vt <- f vx
   vT <- stan cT (vx, vS)
   tT <- quote (Q0 :\\ x) vT vt
-  VL <$> clo E0 (bnd tT)
+  VL <$> clo E0 (bnd n tT)
 
-path :: (Sem PT -> Int -> Sem TM) -> Int -> Sem TM
-path p = underPT $ \ i -> do
+path :: String -> (Sem PT -> Int -> Sem TM) -> Int -> Sem TM
+path x p = underPT $ \ i -> do
   vT <- p (dim i)
   tT <- quote (Q0 :\\ i) VType vT
-  VPath <$> clo E0 (bnd tT)
+  VPath <$> clo E0 (bnd x tT)
 
 segment :: Triple (Sem TM) -> Sem PT -> Sem PT -> Int -> Triple (Sem TM)
-segment p i j = Tr <$> apa p i <*> path (\ k -> apa p (mux k i j)) <*> apa p j
+segment p i j = Tr <$> apa p i <*> path "k" (\ k -> apa p (mux k i j)) <*> apa p j
 
 synpa :: Syn (C0 :\ PT) TM -> Sem TM
-synpa = VPath . VR E0
+synpa = VPath . VR E0 "i"
 
 transport :: Val TM -> Triple (Sem TM) -> Int -> Sem TM
 transport vr (Tr _ (VPath (VK _)) _) = pure vr  -- *obviously* degenerate
 transport vr p = underPT $ \ h -> do
   vZ <- apa p (dim h)
   zZ <- quote (Q0 :\\ h) VType vZ  -- obtain syntax of typical point
-  case dep (R zZ) of
+  case dep (R "i" zZ) of
     Left _  -> pure vr -- *detectably* degenerate
     Right _ -> case (point0 p, zZ, point1 p) of
       (vR@(VB Sg vS0 cT0), B Sg sS tT, VB Sg vS1 cT1) -> do
@@ -260,21 +275,21 @@ transport vr p = underPT $ \ h -> do
               stan cT =<< ((,) <$> vs i <*> apa pS i)
         (vt0, vT0) <- field B1 (vr, vR)
         (::&) <$> vs (VI B1)
-              <*> (transport vt0 =<< (Tr vT0 <$> path vT <*> vT (VI B1)))
+              <*> (transport vt0 =<< (Tr vT0 <$> path "i" vT <*> vT (VI B1)))
       (vR@(VB Pi vS0 cT0), B Pi sS tT, vU@(VB Pi vS1 cT1)) ->
-        lam vU $ \ vs1 -> do
+        lam vU (nomC cT1) $ \ vs1 -> do
           let pS = Tr vS0 (synpa sS) vS1
               vs i = transport vs1 =<< segment pS (VI B1) i
               vT i = do
                 cT <- clo (E0 :< i) tT
                 stan cT =<< ((,) <$> vs i <*> apa pS i)
           (vt0, vT0) <- apf (vr, vR) =<< vs (VI B0)
-          transport vt0 =<< (Tr vT0 <$> path vT <*> vT (VI B1))
-      (vS0 ::-: vT0, sS :-: tT, vS1 ::-: vT1) -> path $ \ j ->
+          transport vt0 =<< (Tr vT0 <$> path "i" vT <*> vT (VI B1))
+      (vS0 ::-: vT0, sS :-: tT, vS1 ::-: vT1) -> path "j" $ \ j ->
         kan (KAN (Tr vS0 (synpa sS) vS1) (Tr vT0 (synpa tT) vT1) vr (VI B1) j)
       (VKanT vk0, KanT (KAN s0 s1 b v h), VKanT vk1) -> do
         vs0 <- kanV B0 vk0 vr   -- down the left face...
-        let pB = VPath (VR E0 (E ((b ::: (point0 s0 :-: point0 s1)) :. h)))
+        let pB = VPath (VR E0 "i" (E ((b ::: (point0 s0 :-: point0 s1)) :. h)))
         -- ...across the base...
         vs1 <- transport vs0 =<< (Tr <$> apa (kanB vk0) (horiz vk0)
                                      <*> pure pB
@@ -304,9 +319,9 @@ degenerate :: Triple (Sem TM) -> Int -> Bool
 degenerate path = underPT $ \ i -> do
   vS <- apa path (dim i)
   sS <- quote (Q0 :\\ i) VType vS
-  case bnd sS of
-    K _  -> pure True
-    R _ -> pure False
+  case bnd "i" sS of
+    K _   -> pure True
+    R _ _ -> pure False
 
 kan :: KAN Sem -> Int -> Sem TM
 kan k | pteq (vert k) (VI B0) = apa (kanB k) (horiz k)  -- on the base?
@@ -342,8 +357,8 @@ proj (_ :< v) V0 = v
 proj (g :< _) (VS i) = proj g i
 
 clo :: Env g -> Bnd g b -> Int -> Clo b
-clo g (R b) = pure (VR g b)
-clo g (K t) = VK <$> eval g t
+clo g (R x b) = pure (VR g x b)
+clo g (K t)   = VK <$> eval g t
 
 mux :: Sem PT -> Sem PT -> Sem PT -> Sem PT
 mux (VI B0) p0 _ = p0
@@ -352,12 +367,13 @@ mux (VMux i q0 q1) p0 p1 = vmux i (mux q0 p0 p1) (mux q1 p0 p1)
 
 vmux :: FV PT -> Sem PT -> Sem PT -> Sem PT
 vmux i p0 p1 | pteq p0 p1 = p0
-vmux (Dim i) (VMux (Dim j) q0 q1) p1
-  | i == j  = vmux (Dim i) q0 p1
-  | i < j   = vmux (Dim j) (vmux (Dim i) q0 p1) (vmux (Dim i) q1 p1)
-vmux (Dim i) p0 (VMux (Dim j) q0 q1)
-  | i == j  = vmux (Dim i) p0 q1
-  | i < j   = vmux (Dim j) (vmux (Dim i) p0 q0) (vmux (Dim i) p0 q1)
+vmux i (VMux j q0 q1) p1
+  | i == j  = vmux i q0 p1
+  | i < j   = vmux j (vmux i q0 p1) (vmux i q1 p1)
+vmux i p0 (VMux j q0 q1)
+  | i == j  = vmux i p0 q1
+  | i < j   = vmux j (vmux i p0 q0) (vmux i p0 q1)
+vmux i p0 p1 = VMux i p0 p1
 
 pteq :: Sem PT -> Sem PT -> Bool
 pteq (VI b) (VI c) = b == c
@@ -372,8 +388,8 @@ data (:~:) :: t -> t -> * where
   Refl :: t :~: t
 
 fveq :: FV a -> FV b -> Maybe (a :~: b)
-fveq (Dim i) (Dim j) | i == j = Just Refl
-fveq (Par i _) (Par j _) | i == j = Just Refl
+fveq (Dim i _) (Dim j _) | i == j = Just Refl
+fveq (Par i _ _) (Par j _ _) | i == j = Just Refl
 fveq _ _ = Nothing
 
 dbFV :: QJ g -> FV b -> Maybe (Var g b)
@@ -383,10 +399,10 @@ dbFV (q :\\ x) y = case fveq x y of
   _         -> VS <$> dbFV q y
 
 underEL :: Sem TM -> (FV EL -> Int -> x) -> Int -> x
-underEL vS k i = k (Par i vS) (i + 1)
+underEL vS k i = k (Par i vS "") (i + 1)
 
 underPT :: (FV PT -> Int -> x) -> Int -> x
-underPT k i = k (Dim i) (i + 1)
+underPT k i = k (Dim i "") (i + 1)
 
 quote :: QJ g -> Sem TM -> Sem TM -> Int -> Syn g TM
 quote q VType VType         = pure Type
@@ -394,11 +410,14 @@ quote q VType (VB z vS cT)  = B z <$> quote q VType vS <*>
   (underEL vS $ \ x -> do
     vx <- eval E0 (P x)
     vT <- stan cT vx
-    bnd <$> quote (q :\\ x) VType vT)
+    bnd (nomC cT) <$> quote (q :\\ x) VType vT)
 quote q VType (VKanT k) = KanT <$> quoka q k
 quote q vF@(VB Pi vS cT) vf = underEL vS $ \ x -> do
     (vt, vT) <- apf (vf, vF) (N (X x))
-    L <$> (bnd <$> quote (q :\\ x) vT vt)
+    let n = case vf of
+              VL (VR _ y _) -> y
+              _ -> nomC cT
+    L <$> (bnd n <$> quote (q :\\ x) vT vt)
 quote q vP@(VB Sg vS cT) vp = do
   (vs, vS) <- field B0 (vp, vP)
   (vt, vT) <- field B1 (vp, vP)
@@ -406,8 +425,9 @@ quote q vP@(VB Sg vS cT) vp = do
 quote q (vS ::-: vT) vq = underPT $ \ i -> do
   vi <- eval E0 (P i)
   vS <- apa (Tr vS vq vT) vi
-  Path <$> (bnd <$> quote (q :\\ i) VType vS)
+  Path <$> (bnd "i" <$> quote (q :\\ i) VType vS)
 quote q _ (N e) = E <$> (fst <$> quoel q e)
+quote q t _ = \ i -> error $ "YUK! " ++ display B1 q (quote q VType t i)
 
 quoka :: QJ g -> KAN Sem -> Int -> KAN (Syn g)
 quoka q (KAN s0@(Tr vS0 _ _) s1@(Tr vS1 _ _) b v h) =
@@ -419,7 +439,7 @@ quotr q (Tr vS0 qS vS1) =
   Tr <$> quote q VType vS0 <*> quote q (vS0 ::-: vS1) qS <*> quote q VType vS1
 
 quoel :: QJ g -> Sem EL -> Int -> (Syn g EL, Sem TM)
-quoel q (X x@(Par _ vT)) = case dbFV q x of
+quoel q (X x@(Par _ vT _)) = case dbFV q x of
   Just i   -> pure (V i, vT)
   Nothing  -> pure (P x, vT)
 quoel q (vf ::$ vs) = do
@@ -451,3 +471,97 @@ quopt q (VMux x p0 p1) = Mux p (quopt q p0) (quopt q p1) where
   p = case dbFV q x of
         Just i   -> V i
         Nothing  -> P x
+
+display :: Bit -> QJ g -> Syn g b -> String
+display _ q (I b) = show b
+display z q (Mux i (I B0) (I B1)) = display z q i
+display z q (Mux i (I B1) (I B0)) = "!" ++ display z q i
+display _ q Type = "Type"
+display z q (E e) = display z q e
+display z q (V i) = display z q (P (qproj q i))
+display _ q (P (Dim _ i)) = i
+display _ q (P (Par _ _ x)) = x
+display B0 q t = "(" ++ display B1 q t ++ ")"
+display _ q (Mux i j k) = concat
+  [display B0 q j, "<", display B1 q i, ">", display B0 q k]
+display _ q (B b s (K t)) = concat
+  [display B0 q s, " ", show b, " ", display B1 q t]
+display _ q (B b s (R x t)) = concat
+  ["(", x, " : ", display B1 q s, ") ", show b, " " ,display B1 (glomE q x) t]
+display _ q (L (K t)) = "\\ _ -> " ++ display B1 q t
+display _ q (L (R x t)) = concat
+  ["\\ ", x, " -> ", display B1 (glomE q x) t]  -- ditto
+display _ q (s :& t) = display B0 q s ++ ", " ++ display B1 q t
+display _ q (s :-: t) = display B0 q s ++ " - " ++ display B0 q t
+display _ q (Path (K _)) = "."
+display _ q (Path (R x t)) = concat
+  ["\\ ", x, " -> ", display B1 (glomP q x) t]
+display _ q (KanT k) = displayK q k
+display _ q (s ::: t) = display B0 q s ++ " : " ++ display B1 q t
+display _ q (f :$ s) = display B1 q f ++ " " ++ display B0 q s
+display _ q (f :. s) = display B1 q f ++ " " ++ display B0 q s
+display _ q (f :@ b) = display B1 q f ++ " " ++ show b
+display _ q (r :^ t) = concat [display B1 q r, " {", displayT q t, "}"]
+display _ q (KanV du k v) = concat
+  [displayK q k, case du of {B0 -> "\\/ "; B1 -> "/\\ "}, display B1 q v]
+
+displayT :: QJ g -> Triple (Syn g TM) -> String
+displayT q (Tr _ (Path (K t)) _) = "\\ _ -> " ++ display B1 q t
+displayT q (Tr _ st _) = display B1 q st
+
+qproj :: QJ g -> Var g b -> FV b
+qproj (_ :\\ v) V0 = v
+qproj (q :\\ _) (VS i) = qproj q i
+
+displayK :: QJ g -> KAN (Syn g) -> String
+displayK q (KAN s0 s1 b v h) = concat
+  [ "[", displayT q s0, " | ", display B1 q b, " | ", displayT q s1, "]("
+  , display B1 q v, ", ", display B1 q h, ")"]
+
+nameUsed :: QJ g -> String -> Bool
+nameUsed Q0 _ = False
+nameUsed (q :\\ Par _ _ x) y = x == y || nameUsed q y
+nameUsed (q :\\ Dim _ x) y = x == y || nameUsed q y
+
+freshen :: QJ g -> String -> String
+freshen q x = if nameUsed q x then go 0 else x where
+  go i = if nameUsed q xi then go (i + 1) else xi where
+    xi = x ++ show i
+
+glomE :: QJ g -> String -> QJ (g :\ EL)
+glomE q x = q :\\ Par 0 VType (freshen q x)  -- yuk
+
+glomP :: QJ g -> String -> QJ (g :\ PT)
+glomP q x = q :\\ Dim 0 (freshen q x)  -- yuk
+
+data Expt
+  = (String, Syn C0 TM) :/ (FV EL -> Expt)
+  | Go (Syn C0 EL)
+
+instance Show Expt where
+  show e = go e 0 where
+    go (Go e) i = concat
+      [ "----------------------\n"
+      , display B1 Q0 e
+      , "\n  -->\n"
+      , display B1 Q0 (t ::: tT)
+      ] where
+      (vt, vT) = eval E0 e i
+      tT = quote Q0 VType vT i
+      t  = quote Q0 vT vt i
+    go ((x, s) :/ e) i = concat
+      [ x, " : ", display B1 Q0 s, "\n"
+      , go (e (Par i (eval E0 s i) x)) (i + 1)
+      ]
+
+expt0 :: Expt
+expt0 =
+  ("X", Type) :/ \ xX -> ("Y", Type) :/ \ yY ->
+  ("f", B Pi (E (P xX)) (K (E (P yY)))) :/ \ f ->
+  ("X'", Type) :/ \ xX' -> ("Y'", Type) :/ \ yY' ->
+  ("XQ", E (P xX) :-: E (P xX')) :/ \ xXQ ->
+  ("YQ", E (P yY) :-: E (P yY')) :/ \ yYQ ->
+  Go
+   (E (P f) :^ Tr (B Pi (E (P xX)) (K (E (P yY))))
+                  (Path (R "i" (B Pi (E (P xXQ :. V V0)) (K (E (P yYQ :. V V0))))))
+                  (B Pi (E (P xX')) (K (E (P yY')))))
