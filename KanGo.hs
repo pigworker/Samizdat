@@ -88,6 +88,13 @@ act f (KanT (Tr s0 sq s1) (Tr t0 tq t1) st (p, q)) =
        <*> (Tr <$> act f t0 <*> act f tq <*> act f t1)
        <*> act f sq
        <*> ((,) <$> act f p <*> act f q)
+act f (E e)       = E <$> act f e
+act f (V i)       = tout <$> f i
+act f (P x)       = pure (P x)
+act f (g :$ s)    = (:$) <$> act f g <*> act f s
+act f (g :. p)    = (:.) <$> act f g <*> act f p
+act f (g :@ b)    = (:@) <$> act f g <*> pure b
+act f (g :^ q)    = (:^) <$> act f g <*> act f q
 
 bact :: forall f t g d c. (Applicative f, Kit t) =>
        (forall b. Var g b -> f (t d b)) ->
