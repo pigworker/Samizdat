@@ -20,6 +20,26 @@ data Var :: CX -> SC -> * where
 data Quant = Pi | Sg deriving (Show, Eq)
 data Bit = B0 | B1 deriving (Show, Eq)
 
+data Triple x = Tr  {
+  point0 :: x       ,
+  path01 :: x       ,
+  point1 :: x       }
+  deriving (Functor, Foldable, Traversable)
+  -- to be used for two things joined by a path in the middle
+point :: Bit -> Triple x -> x
+point B0 = point0
+point B1 = point1
+
+data KAN f = KAN            {
+  side0   :: Triple (f TM)  ,
+  side1   :: Triple (f TM)  ,
+  base    :: f TM           ,
+  vert    :: f PT           ,
+  horiz   :: f PT           }
+side :: Bit -> KAN f -> Triple (f TM)
+side B0 = side0
+side B1 = side1
+
 data Syn :: CX -> SC -> * where
   I      :: Bit -> Syn g PT
   Mux    :: Syn g PT -> Syn g PT -> Syn g PT -> Syn g PT
@@ -32,8 +52,7 @@ data Syn :: CX -> SC -> * where
 
   (:-:)  :: Syn g TM -> Syn g TM -> Syn g TM
   Path   :: Bnd g PT -> Syn g TM
-  KanT   :: Triple (Syn g TM) -> Triple (Syn g TM) -> Syn g TM ->
-            (Syn g PT, Syn g PT) -> Syn g TM
+  KanT   :: KAN (Syn g) -> Syn g TM
 
   E      :: Syn g EL -> Syn g TM
 
@@ -45,7 +64,8 @@ data Syn :: CX -> SC -> * where
   (:$)   :: Syn g EL -> Syn g TM -> Syn g EL
   (:.)   :: Syn g EL -> Syn g PT -> Syn g EL
   (:@)   :: Syn g EL -> Bit -> Syn g EL
-  (:^)   :: Syn g TM -> Syn g EL -> Syn g EL
+  (:^)   :: Syn g TM -> Triple (Syn g TM) -> Syn g EL
+  KanV   :: Bit -> KAN (Syn g) -> Syn g TM -> Syn g EL
 
 data Bnd :: CX -> SC -> * where
   R :: Syn (g :\ b) TM -> Bnd g b
@@ -83,18 +103,20 @@ act f (L t)       = L <$> bact f t
 act f (s :& t)    = (:&) <$> act f s <*> act f t
 act f (s :-: t)   = (:-:) <$> act f s <*> act f t
 act f (Path t)    = Path <$> bact f t
-act f (KanT (Tr s0 sq s1) (Tr t0 tq t1) st (p, q)) =
-  KanT <$> (Tr <$> act f s0 <*> act f sq <*> act f s1)
-       <*> (Tr <$> act f t0 <*> act f tq <*> act f t1)
-       <*> act f sq
-       <*> ((,) <$> act f p <*> act f q)
+act f (KanT k)    = KanT <$> kact f k
 act f (E e)       = E <$> act f e
 act f (V i)       = tout <$> f i
 act f (P x)       = pure (P x)
 act f (g :$ s)    = (:$) <$> act f g <*> act f s
 act f (g :. p)    = (:.) <$> act f g <*> act f p
 act f (g :@ b)    = (:@) <$> act f g <*> pure b
-act f (g :^ q)    = (:^) <$> act f g <*> act f q
+act f (g :^ q)    = (:^) <$> act f g <*> traverse (act f) q
+
+kact :: (Applicative f, Kit t) => (forall b. Var g b -> f (t d b)) ->
+        KAN (Syn g) -> f (KAN (Syn d))
+kact f (KAN s0 s1 b v h) =
+  KAN <$> traverse (act f) s0 <*> traverse (act f) s1 <*> act f b
+      <*> act f v <*> act f h
 
 bact :: forall f t g d c. (Applicative f, Kit t) =>
        (forall b. Var g b -> f (t d b)) ->
@@ -130,8 +152,7 @@ data Sem :: SC -> * where
 
   (::-:) :: Sem TM -> Sem TM -> Sem TM
   VPath  :: Clo PT -> Sem TM
-  VKanT  :: Triple (Sem TM) -> Triple (Sem TM) -> Sem TM ->
-            (Sem PT, Sem PT) -> Sem TM
+  VKanT  :: KAN Sem -> Sem TM
 
   N      :: Sem EL -> Sem TM
 
@@ -140,7 +161,8 @@ data Sem :: SC -> * where
   (::$)  :: Sem EL -> Sem TM -> Sem EL
   (::.)  :: Sem EL -> Sem PT -> Sem EL
   (::@)  :: Sem EL -> Bit -> Sem EL
-  XP     :: Triple (Sem TM) -> Sem TM -> Sem EL
+  (::^)  :: Sem TM -> Triple (Sem TM) -> Sem EL
+  VKanV  :: Bit -> KAN Sem -> Sem TM -> Sem EL
 
 data Clo :: SC -> * where
   VR :: Env g -> Syn (g :\ b) TM -> Clo b
@@ -179,17 +201,26 @@ eval g (L b) = VL <$> clo g b
 eval g (s :& t) = (::&) <$> eval g s <*> eval g t
 eval g (s :-: t) = (::-:) <$> eval g s <*> eval g t
 eval g (Path b) = VPath <$> clo g b
-eval g (KanT sT tT st (i, j)) =
-  join (kan <$> traverse (eval g) sT <*> traverse (eval g) tT <*> eval g st
-            <*> ((,) <$> eval g i <*> eval g j))
+eval g (KanT k) = kan =<< keval g k
 eval g (E e) = fst <$> eval g e
 eval g (V i) = pure (proj g i)
 eval _ (P i@(Dim _)) = pure (dim i)
 eval _ (P x@(Par i t)) = pure (N (X x), t)
 eval g (f :$ s) = join (apf <$> eval g f <*> eval g s)
-eval g (f :. s) = (, VType) <$> join (apa <$> eval g f <*> eval g s)
+eval g (f :. s) = (, VType) <$> join ((apa . triple) <$> eval g f <*> eval g s)
 eval g (e :@ b) = join (field b <$> eval g e)
-eval g (r :^ q) = join (transport <$> eval g r <*> eval g q)
+eval g (r :^ q) = do
+  r <- eval g r
+  p <- traverse (eval g) q
+  (, point1 p) <$> transport r p
+
+triple :: Val EL -> Triple (Sem TM)
+triple (q, s ::-: t) = Tr s q t
+
+keval :: Env g -> KAN (Syn g) -> Int -> KAN Sem
+keval g (KAN s0 s1 b v h) =
+  KAN <$> traverse (eval g) s0 <*> traverse (eval g) s1 <*> eval g b
+      <*> eval g v <*> eval g h
 
 lam :: Sem TM -> (Sem TM -> Int -> Sem TM) -> Int -> Sem TM
 lam (VB Pi vS cT) f = underEL vS $ \ x -> do
@@ -205,67 +236,84 @@ path p = underPT $ \ i -> do
   tT <- quote (Q0 :\\ i) VType vT
   VPath <$> clo E0 (bnd tT)
 
-transport :: Val TM -> Val EL -> Int -> Val EL
-transport vr (VPath (VK vR), _) = pure (vr, vR)
-transport vr (vq, vQ@(vR ::-: vU)) = do
-  q <- quote Q0 vQ vq
-  case q of
-    Path b  -> case dep b of
-      Left _   -> pure (vr, vR)
-      Right rR -> (, vU) <$> case (vr, rR) of
-        (_, B Sg sS tT) -> do
-          let vS i = eval (E0 :< i) sS
-          (vs0, vS0) <- field B0 (vr, vR)
-          let vs i = do
-                vSi <- vS i
-                qS <- path $ \ j -> vS (mux j (VI B0) i)
-                fst <$> transport vs0 (qS, vS0 ::-: vSi)
-              vT i = do
-                cT <- clo (E0 :< i) tT
-                stan cT =<< ((,) <$> vs i <*> vS i)
-          (vt0, vT0) <- field B1 (vr, vR)
-          vT1 <- vT (VI B1)
-          qT <- path vT
-          (::&) <$> vs (VI B1) <*> (fst <$> transport vt0 (qT, vT0 ::-: vT1))
-        (_, B Pi sS tT) -> lam vU $ \ vs1 -> do
-          let vS i = eval (E0 :< i) sS
-              vs i = do
-                vSS <- (::-:) <$> vS (VI B1) <*> vS i
-                qS <- path $ \j -> vS (mux j (VI B1) i)
-                fst <$> transport vs1 (qS, vSS)
-              vT i = do
-                cT <- clo (E0 :< i) tT
-                stan cT =<< ((,) <$> vs i <*> vS i)
-          (vt0, vT0) <- apf (vr, vR) =<< vs (VI B0)
-          vT1 <- vT (VI B1)
-          qT <- path vT
-          fst <$> transport vt0 (qT, vT0 ::-: vT1)
-        (_, sS :-: tT) -> path $ \ j -> do
-            let vS i = eval (E0 :< i) sS
-                vT i = eval (E0 :< i) tT
-            vST <- Tr <$> vS (VI B0) <*> path vS <*> vS (VI B1)
-            vTT <- Tr <$> vT (VI B0) <*> path vT <*> vT (VI B1)
-            kan vST vTT vr (VI B1, j)
-        _ -> pure (N (XP (Tr vR vq vU) vr))
+segment :: Triple (Sem TM) -> Sem PT -> Sem PT -> Int -> Triple (Sem TM)
+segment p i j = Tr <$> apa p i <*> path (\ k -> apa p (mux k i j)) <*> apa p j
 
-data Triple x = Tr x x x deriving (Functor, Foldable, Traversable)
+synpa :: Syn (C0 :\ PT) TM -> Sem TM
+synpa = VPath . VR E0
+
+transport :: Val TM -> Triple (Sem TM) -> Int -> Sem TM
+transport vr (Tr _ (VPath (VK _)) _) = pure vr  -- *obviously* degenerate
+transport vr p = underPT $ \ h -> do
+  vZ <- apa p (dim h)
+  zZ <- quote (Q0 :\\ h) VType vZ  -- obtain syntax of typical point
+  case dep (R zZ) of
+    Left _  -> pure vr -- *detectably* degenerate
+    Right _ -> case (point0 p, zZ, point1 p) of
+      (vR@(VB Sg vS0 cT0), B Sg sS tT, VB Sg vS1 cT1) -> do
+        let pS = Tr vS0 (synpa sS) vS1
+        (vs0, _) <- field B0 (vr, vR)
+        let vs i = transport vs0 =<< segment pS (VI B0) i
+            vT i = do
+              cT <- clo (E0 :< i) tT
+              stan cT =<< ((,) <$> vs i <*> apa pS i)
+        (vt0, vT0) <- field B1 (vr, vR)
+        (::&) <$> vs (VI B1)
+              <*> (transport vt0 =<< (Tr vT0 <$> path vT <*> vT (VI B1)))
+      (vR@(VB Pi vS0 cT0), B Pi sS tT, vU@(VB Pi vS1 cT1)) ->
+        lam vU $ \ vs1 -> do
+          let pS = Tr vS0 (synpa sS) vS1
+              vs i = transport vs1 =<< segment pS (VI B1) i
+              vT i = do
+                cT <- clo (E0 :< i) tT
+                stan cT =<< ((,) <$> vs i <*> apa pS i)
+          (vt0, vT0) <- apf (vr, vR) =<< vs (VI B0)
+          transport vt0 =<< (Tr vT0 <$> path vT <*> vT (VI B1))
+      (vS0 ::-: vT0, sS :-: tT, vS1 ::-: vT1) -> path $ \ j ->
+        kan (KAN (Tr vS0 (synpa sS) vS1) (Tr vT0 (synpa tT) vT1) vr (VI B1) j)
+      (VKanT vk0, KanT (KAN s0 s1 b v h), VKanT vk1) -> do
+        vs0 <- kanV B0 vk0 vr   -- down the left face...
+        let pB = VPath (VR E0 (E ((b ::: (point0 s0 :-: point0 s1)) :. h)))
+        -- ...across the base...
+        vs1 <- transport vs0 =<< (Tr <$> apa (kanB vk0) (horiz vk0)
+                                     <*> pure pB
+                                     <*> apa (kanB vk1) (horiz vk1))
+        kanV B1 vk1 vs1  -- ...and up the right face
+      _ -> pure (N (vr ::^ p))
+
+kanB :: KAN Sem -> Triple (Sem TM)
+kanB (KAN (Tr vS _ _) (Tr vT _ _) b _ _) = Tr vS b vT
+
+-- trying to ship a value from a point in a Kan square
+--   (B0) down to the base
+--   (B1) or up from the base
+kanV :: Bit -> KAN Sem -> Sem TM -> Int -> Sem TM
+kanV _ k v | pteq (vert k) (VI B0) = pure v   -- on the base already
+kanV du k v = case horiz k of
+    VI b -> transport v =<< seg du (side b k)   -- on one side or the other
+    _ -> do
+      b <- (&&) <$> degenerate (side0 k) <*> degenerate (side1 k)
+                -- we will often know this not to be the case
+      pure $ if b then v else N (VKanV du k v)
+  where
+    seg B0 s = segment s (vert k) (VI B0)
+    seg B1 s = segment s (VI B0) (vert k)
 
 degenerate :: Triple (Sem TM) -> Int -> Bool
-degenerate (Tr vS0 qS vS1) = underPT $ \ i -> do
-  vS <- apa (qS, vS0 ::-: vS1) (dim i)
+degenerate path = underPT $ \ i -> do
+  vS <- apa path (dim i)
   sS <- quote (Q0 :\\ i) VType vS
   case bnd sS of
     K _  -> pure True
     R _ -> pure False
 
-kan :: Triple (Sem TM) -> Triple (Sem TM) -> Sem TM -> (Sem PT, Sem PT) ->
-       Int -> Sem TM
-kan (Tr vS0 _ _) (Tr vT0 _ _) st0 (VI B0, j) = apa (st0, vS0 ::-: vT0) j
-kan (Tr vS0 vS1 qS) _ _ (i, VI B0) = apa (qS, vS0 ::-: vS1) i
-kan _ (Tr vT0 vT1 qT) _ (i, VI B1) = apa (qT, vT0 ::-: vT1) i
-kan s3@(Tr vS0 _ _) t3@(Tr vT0 _ _) st0 (i, j) = do
-  b <- (&&) <$> degenerate s3 <*> degenerate t3
-  if b then apa (st0, vS0 ::-: vT0) j else pure $ VKanT s3 t3 st0 (i, j)
+kan :: KAN Sem -> Int -> Sem TM
+kan k | pteq (vert k) (VI B0) = apa (kanB k) (horiz k)  -- on the base?
+kan k = case horiz k of
+  VI b -> apa (side b k) (vert k)  -- one one side or the other
+  _ -> do -- so we're in the interior...if there is an interior
+    b <- (&&) <$> degenerate (side0 k) <*> degenerate (side1 k)
+    if b then apa (kanB k) (horiz k) else pure $ VKanT k
 
 field :: Bit -> Val EL -> Int -> Val EL
 field B0 (s ::& _, VB Sg sS _)  = pure (s,            sS)
@@ -273,11 +321,11 @@ field B0 (N e,     VB Sg sS _)  = pure (N (e ::@ B0), sS)
 field B1 (s ::& t, VB Sg sS tT) = (t,) <$> stan tT (s, sS)
 field B1 (N e,     VB Sg sS tT) = (N (e ::@ B1),) <$> stan tT (N (e ::@ B0), sS)
 
-apa :: Val EL -> Val PT -> Int -> Sem TM
-apa (_, sS ::-: tT) (VI B0) = pure sS
-apa (_, sS ::-: tT) (VI B1) = pure tT
-apa (VPath b, _) i = stan b i
-apa (N f, _) i     = pure (N (f ::. i))
+apa :: Triple (Sem TM) -> Sem PT -> Int -> Sem TM
+apa (Tr vS _ _) (VI B0)   = pure vS
+apa (Tr _ _ vT) (VI B1)   = pure vT
+apa (Tr _ (VPath b) _) i  = stan b i
+apa (Tr _ (N f)     _) i  = pure (N (f ::. i))
 
 apf :: Val EL -> Val TM -> Int -> Val EL
 apf (f, VB Pi sS tT) s =
@@ -346,9 +394,7 @@ quote q VType (VB z vS cT)  = B z <$> quote q VType vS <*>
     vx <- eval E0 (P x)
     vT <- stan cT vx
     bnd <$> quote (q :\\ x) VType vT)
-quote q VType (VKanT vST@(Tr vS0 _ _) vTT@(Tr vT0 _ _) vst0 (vi, vj)) =
-  KanT <$> quotr q vST <*> quotr q vTT <*> quote q (vS0 ::-: vT0) vst0
-       <*> pure (quopt q vi, quopt q vj)
+quote q VType (VKanT k) = KanT <$> quoka q k
 quote q vF@(VB Pi vS cT) vf = underEL vS $ \ x -> do
     (vt, vT) <- apf (vf, vF) (N (X x))
     L <$> (bnd <$> quote (q :\\ x) vT vt)
@@ -356,11 +402,16 @@ quote q vP@(VB Sg vS cT) vp = do
   (vs, vS) <- field B0 (vp, vP)
   (vt, vT) <- field B1 (vp, vP)
   (:&) <$> quote q vS vs <*> quote q vT vt
-quote q vQ@(vS ::-: vT) vq = underPT $ \ i -> do
+quote q (vS ::-: vT) vq = underPT $ \ i -> do
   vi <- eval E0 (P i)
-  vS <- apa (vq, vQ) vi
+  vS <- apa (Tr vS vq vT) vi
   Path <$> (bnd <$> quote (q :\\ i) VType vS)
 quote q _ (N e) = E <$> (fst <$> quoel q e)
+
+quoka :: QJ g -> KAN Sem -> Int -> KAN (Syn g)
+quoka q (KAN s0@(Tr vS0 _ _) s1@(Tr vS1 _ _) b v h) =
+  KAN <$> quotr q s0 <*> quotr q s1 <*> quote q (vS0 ::-: vS1) b
+      <*> pure (quopt q v) <*> pure (quopt q h)
 
 quotr :: QJ g -> Triple (Sem TM) -> Int -> Triple (Syn g TM)
 quotr q (Tr vS0 qS vS1) =
@@ -381,6 +432,17 @@ quoel q (ve ::@ b) = do
   (e, vE@(VB Sg vS cT)) <- quoel q ve
   (_, vT) <- field b (N ve, vE)
   pure (e :@ b, vT)
+quoel q (vr ::^ vp) =
+  (,) <$> ((:^) <$> quote q (point0 vp) vr <*> quotr q vp)
+      <*> pure (point1 vp)
+quoel q (VKanV du vk vv) = do
+  k <- quoka q vk
+  vB <- apa (kanB vk) (horiz vk)
+  let (src, trg) = case du of
+        B0 -> (VKanT vk, vB)  -- if we're quoting, vk is nondegenerate
+        B1 -> (vB, VKanT vk)
+  v <- quote q src vv
+  pure (KanV du k v, trg)
 
 quopt :: QJ g -> Sem PT -> Syn g PT
 quopt q (VI b) = I b
@@ -388,8 +450,3 @@ quopt q (VMux x p0 p1) = Mux p (quopt q p0) (quopt q p1) where
   p = case dbFV q x of
         Just i   -> V i
         Nothing  -> P x
-
-
-  
-
-
