@@ -95,22 +95,23 @@ instance Kit Syn where
 
 act :: (Applicative f, Kit t) => (forall b. Var g b -> f (t d b)) ->
        Syn g b -> f (Syn d b)
-act f (I b)       = pure (I b)
-act f (Mux r s t) = Mux <$> act f r <*> act f s <*> act f t
-act f Type        = pure Type
-act f (B q s t)   = B q <$> act f s <*> bact f t
-act f (L t)       = L <$> bact f t
-act f (s :& t)    = (:&) <$> act f s <*> act f t
-act f (s :-: t)   = (:-:) <$> act f s <*> act f t
-act f (Path t)    = Path <$> bact f t
-act f (KanT k)    = KanT <$> kact f k
-act f (E e)       = E <$> act f e
-act f (V i)       = tout <$> f i
-act f (P x)       = pure (P x)
-act f (g :$ s)    = (:$) <$> act f g <*> act f s
-act f (g :. p)    = (:.) <$> act f g <*> act f p
-act f (g :@ b)    = (:@) <$> act f g <*> pure b
-act f (g :^ q)    = (:^) <$> act f g <*> traverse (act f) q
+act f (I b)        = pure (I b)
+act f (Mux r s t)  = Mux <$> act f r <*> act f s <*> act f t
+act f Type         = pure Type
+act f (B q s t)    = B q <$> act f s <*> bact f t
+act f (L t)        = L <$> bact f t
+act f (s :& t)     = (:&) <$> act f s <*> act f t
+act f (s :-: t)    = (:-:) <$> act f s <*> act f t
+act f (Path t)     = Path <$> bact f t
+act f (KanT k)     = KanT <$> kact f k
+act f (E e)        = E <$> act f e
+act f (V i)        = tout <$> f i
+act f (P x)        = pure (P x)
+act f (g :$ s)     = (:$) <$> act f g <*> act f s
+act f (g :. p)     = (:.) <$> act f g <*> act f p
+act f (g :@ b)     = (:@) <$> act f g <*> pure b
+act f (g :^ q)     = (:^) <$> act f g <*> traverse (act f) q
+act f (KanV b k v) = KanV b <$> kact f k <*> act f v
 
 kact :: (Applicative f, Kit t) => (forall b. Var g b -> f (t d b)) ->
         KAN (Syn g) -> f (KAN (Syn d))
