@@ -353,13 +353,6 @@ nsub x        (NK t)  s       = NK ^$ nsub x t s
 nsub (x :< p) (NL t) (s :< u) = abst $ nsub (Ss x :< OPES p) t (s :< OPE' u)
 nsub x        (NE t)  s       = hsub x t s
 
-{-
-(RP One y ts)) s = case which x y of
-  Hit0 y'   q -> applies s (ts :< p <^> rope q)
-  Hit1    z q ->
-    NA ^$ rp (One :< p <^> lope q) (spsub (z :< p <^> rope q) ts s)
-  Hit2 y' z q -> applies s (spsub (z :< p <^> rope q) ts s)
--}
 abst :: Th Nm (S m) -> Th Nm m
 abst (t :< OPE' w)      = NK t :< w
 abst (t :< OPES w)      = NL t :< w
