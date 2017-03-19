@@ -268,6 +268,8 @@ ope2ASSOC (OPE'S p) (OPESS q) = case ope2ASSOC p q of
 ope2ASSOC (OPES' p) (OPESS q) = case ope2ASSOC p q of
   OPE2ASSOC r s -> OPE2ASSOC (OPE'S r) (opeSS s)
 
+-- managed to avoid using this, but didn't want to throw it away!
+
 
 ------------------------------------------------------------------------------
 -- RELEVANT NORMAL FORMS
@@ -277,22 +279,16 @@ ope2ASSOC (OPES' p) (OPESS q) = case ope2ASSOC p q of
 data Nm :: Nat -> * where
   NK :: Nm m -> Nm m
   NL :: Nm (S m) -> Nm m
-  NA :: RP One Sp m -> Nm m
+  NE :: Ne m -> Nm m
 deriving instance Show (Nm n)
 instance ShowN Nm where showN = show
 
--- being alone
-data One :: Nat -> * where
-  One :: One (S Z)
-deriving instance Show (One n)
-instance ShowN One where showN = show
-
--- spines are left-nested lists
-data Sp :: Nat -> * where
-  S0 :: Sp Z
-  SS :: RP Sp Nm m -> Sp m
-deriving instance Show (Sp n)
-instance ShowN Sp where showN = show
+-- neutrals are left-nested applications of variables
+data Ne :: Nat -> * where
+  NV :: Ne (S Z)
+  NA :: RP Ne Nm m -> Ne m
+deriving instance Show (Ne n)
+instance ShowN Ne where showN = show
 
 -- reassociation of OPE2s
 
@@ -353,37 +349,33 @@ which (Ss x) (OPE'S p) = case which x p of
 ------------------------------------------------------------------------------
 
 nsub :: Th (Sel m') m -> Nm m' -> Th Nm m -> Th Nm m
-nsub x (NK t) s = NK ^$ nsub x t s
+nsub x        (NK t)  s       = NK ^$ nsub x t s
 nsub (x :< p) (NL t) (s :< u) = abst $ nsub (Ss x :< OPES p) t (s :< OPE' u)
-nsub (x :< p) (NA (RP One y ts)) s = case which x y of
+nsub x        (NE t)  s       = hsub x t s
+
+{-
+(RP One y ts)) s = case which x y of
   Hit0 y'   q -> applies s (ts :< p <^> rope q)
   Hit1    z q ->
     NA ^$ rp (One :< p <^> lope q) (spsub (z :< p <^> rope q) ts s)
   Hit2 y' z q -> applies s (spsub (z :< p <^> rope q) ts s)
-
+-}
 abst :: Th Nm (S m) -> Th Nm m
 abst (t :< OPE' w)      = NK t :< w
 abst (t :< OPES w)      = NL t :< w
 abst (t :< OPEI (Sy m)) = NL t :< OPEI m
 
-spsub :: Th (Sel n') m -> Sp n' -> Th Nm m -> Th Sp m
-spsub (x :< p) (SS (RP ts q t)) s = case which x q of
-  Hit0 y   r ->
-    SS ^$ rp (spsub (y :< p <^> lope r) ts s) (t :< p <^> rope r)
-  Hit1   z r ->
-    SS ^$ rp (ts :< p <^> lope r)             (nsub (z :< p <^> rope r) t s)
-  Hit2 y z r ->
-    SS ^$ rp (spsub (y :< p <^> lope r) ts s) (nsub (z :< p <^> rope r) t s)
+hsub :: Th (Sel n') m -> Ne n' -> Th Nm m -> Th Nm m
+hsub _        NV              s = s
+hsub (x :< p) (NA (RP f q a)) s = apply $ case which x q of
+  Hit0 y   r -> (hsub (y :< p <^> lope r) f s , a :< p <^> rope r)
+  Hit1   z r -> (NE f :< p <^> lope r         , nsub (z :< p <^> rope r) a s)
+  Hit2 y z r -> (hsub (y :< p <^> lope r) f s , nsub (z :< p <^> rope r) a s)
 
-applies :: Th Nm m -> Th Sp m -> Th Nm m
-applies f (S0 :< _)             = f
-applies f (SS (RP ss q s) :< p) =
-  apply (applies f (ss :< p <^> lope q)) (s :< p <^> rope q)
-
-apply :: Th Nm m -> Th Nm m -> Th Nm m
-apply (NK t :< u) _ = t :< u
-apply (NL t :< u) s = nsub (Zs (fst (opeEnds u)) :< u) t s
-apply (NA f :< u) s = (NA . (id <&> SS) . rassocLR) ^$ rp (f :< u) s
+apply :: (Th Nm m, Th Nm m) -> Th Nm m
+apply (NK t :< u, _) = t :< u
+apply (NL t :< u, s) = nsub (Zs (fst (opeEnds u)) :< u) t s
+apply (NE f :< u, s) = (NE . NA) ^$ rp (f :< u) s
 
 
 ------------------------------------------------------------------------------
@@ -391,9 +383,9 @@ apply (NA f :< u) s = (NA . (id <&> SS) . rassocLR) ^$ rp (f :< u) s
 ------------------------------------------------------------------------------
 
 nm :: Tm n -> Th Nm n
-nm (V i)    = NA (RP One (OPES' opeZZ) S0) :< i
+nm (V i)    = NE NV :< i
 nm (L t)    = abst (nm t)
-nm (f :$ s) = apply (nm f) (nm s)
+nm (f :$ s) = apply (nm f, nm s)
 
 instance ShowN f => Show (Th f n) where
   show (f :< w) = showN f ++ " :< " ++ show w
