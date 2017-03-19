@@ -119,7 +119,6 @@ fE (OPES p) = opeS (nOPE (Sy (snd (opeEnds p))))
 fE (OPE' p) = OPE' (fE p)
 
 
-
 ------------------------------------------------------------------------------
 -- THINNED THINGS
 ------------------------------------------------------------------------------
@@ -288,7 +287,7 @@ data One :: Nat -> * where
 deriving instance Show (One n)
 instance ShowN One where showN = show
 
--- spines are right-nested lists
+-- spines are left-nested lists
 data Sp :: Nat -> * where
   S0 :: Sp Z
   SS :: RP Sp Nm m -> Sp m
