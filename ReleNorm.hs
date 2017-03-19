@@ -27,26 +27,10 @@ and the embedding of the output scope into the input scope.
 
 -- usual type level numbers and singletons
 data Nat = Z | S Nat deriving Show
-data Natty :: Nat -> * where
-  Zy :: Natty Z
-  Sy :: Natty n -> Natty (S n)
-class NATTY (n :: Nat) where
-  natty :: Natty n
-instance NATTY Z where
-  natty = Zy
-instance NATTY n => NATTY (S n) where
-  natty = Sy natty
 
 -- working with Nat-indexed things, we'll sometimes need to know "all Show"
 class ShowN (f :: Nat -> *) where
   showN :: f n -> String
-instance ShowN Natty where showN = show
-
-nat :: Natty n -> Int
-nat Zy     = 0
-nat (Sy m) = 1 + nat m
-instance Show (Natty n) where
-  show = show . nat
 
 
 ------------------------------------------------------------------------------
@@ -67,56 +51,67 @@ instance ShowN Tm where showN = show
 ------------------------------------------------------------------------------
 
 data OPE :: Nat -> Nat -> * where
-  OPEI :: Natty n -> OPE n n          -- convenient redundancy
-  OPES :: OPE n m -> OPE (S n) (S m)  -- OPES (OPEI n) ~ OPEI (Sy n)
-  OPE' :: OPE n m -> OPE n (S m)
+  OPEI :: OPE n n                     -- convenient redundancy
+  OPES :: OPE n m -> OPE (S n) (S m)  -- OPES OPEI ~ OPEI
+  OPEN :: OPE Z m                     -- OPEN Zy ~ OPEI Zy
+  OPE' :: OPE n m -> OPE n (S m)      -- OPE' OPEN ~ OPEN
 instance Show (OPE n m) where
-  show (OPEI n) = show n
+  show OPEI     = "I"
   show (OPES p) = show p ++ "|"
+  show OPEN     = "0"
   show (OPE' p) = show p ++ "'"
 instance ShowN (OPE n) where showN = show
 
--- smart constructor maximizing use of OPEI
+-- smart constructors maximizing use of OPEI and OPEN
 opeS :: OPE n m -> OPE (S n) (S m)
-opeS (OPEI n) = OPEI (Sy n)
-opeS p        = OPES p
+opeS OPEI = OPEI
+opeS p    = OPES p
 
--- finding both ends of an OPE
-opeEnds :: OPE n m -> (Natty n, Natty m)
-opeEnds (OPEI n) = (n, n)
-opeEnds (OPES p) = case opeEnds p of
-  (n, m) -> (Sy n, Sy m)
-opeEnds (OPE' p) = case opeEnds p of
-  (n, m) -> (n, Sy m)
+ope' :: OPE n m -> OPE n (S m)
+ope' OPEN = OPEN
+ope' p    = OPE' p
 
+-- smart eliminators for OPEs
+ope2Z :: OPE n Z -> (n ~ Z => t) -> t
+ope2Z OPEI t = t
+ope2Z OPEN t = t
+
+ope2S :: (OPE n' m -> t) ->
+         (forall n. n' ~ S n => OPE n m -> t) ->
+         OPE n' (S m) -> t
+ope2S f' fS (OPES p) = fS p
+ope2S f' fS  OPEI    = fS OPEI
+ope2S f' fS (OPE' p) = f' p
+ope2S f' fS  OPEN    = f' OPEN
+
+opeS2 :: (forall m. m' ~ S m => OPE (S n) (S m) -> t) ->
+         OPE (S n) m' -> t
+opeS2 f  OPEI    = f OPEI
+opeS2 f (OPES p) = f (OPES p)
+opeS2 f (OPE' p) = f (OPE' p)
+         
 -- composition of OPEs
 (<^>) :: OPE m p -> OPE n m -> OPE n p
-OPEI _ <^> q      = q
-p      <^> OPEI _ = p
+p      <^> OPEN   = OPEN
+OPEI   <^> q      = q
+p      <^> OPEI   = p
 OPES p <^> OPES q = opeS (p <^> q)
-OPES p <^> OPE' q = OPE' (p <^> q)
-OPE' p <^> q      = OPE' (p <^> q)
+OPES p <^> OPE' q = ope' (p <^> q)
+OPE' p <^> q      = ope' (p <^> q)
 infixl 6 <^>
-
--- OPEs from empty
-nOPE :: Natty n -> OPE Z n
-nOPE Zy     = OPEI Zy
-nOPE (Sy n) = OPE' (nOPE n)
 
 -- Finite sets are OPEs from one
 type Fin = OPE (S Z)
 
-fZ :: NATTY n => Fin (S n)
-fZ = opeS (nOPE natty)
+fZ :: Fin (S n)
+fZ = opeS OPEN
 
 fS :: Fin n -> Fin (S n)
-fS = OPE'
+fS = ope'
 
 -- value-preserving embedding
 fE :: Fin n -> Fin (S n)
-fE (OPEI (Sy Zy)) = fE (OPES (OPEI Zy))
-fE (OPES p) = opeS (nOPE (Sy (snd (opeEnds p))))
-fE (OPE' p) = OPE' (fE p)
+fE = opeS2 (ope2S (ope' . fE) (opeS . ope'))
 
 
 ------------------------------------------------------------------------------
@@ -145,12 +140,16 @@ h ^$ (f :< u) = h f :< u
 -- ensuring that the target is *covered*.
 
 data OPE2 :: Nat -> Nat -> Nat -> * where
-  OPEII :: Natty m -> OPE2 m m m
+  OPEII :: OPE2 m m m  -- OPESS OPEII ~ OPEII   OPEII{Z} ~ OPENI{Z} ~ OPEIN{Z}
+  OPENI :: OPE2 Z m m  -- OPE'S OPENI ~ OPENI
+  OPEIN :: OPE2 m Z m  -- OPES' OPEIN ~ OPEIN
   OPESS :: OPE2 n n' m -> OPE2 (S n) (S n') (S m)
   OPES' :: OPE2 n n' m -> OPE2 (S n) n' (S m)
   OPE'S :: OPE2 n n' m -> OPE2 n (S n') (S m)
 instance Show (OPE2 n n' m) where
-  show (OPEII n) = show n
+  show OPEII = "II"
+  show OPENI = "0I"
+  show OPEIN = "I0"
   show (OPESS p) = show p ++ "^"
   show (OPES' p) = show p ++ "/"
   show (OPE'S p) = show p ++ "\\"
@@ -167,46 +166,52 @@ instance (ShowN f, ShowN g) => ShowN (RP f g) where showN = show
 
 -- OPEII is redundant: we really need only
 opeZZ :: OPE2 Z Z Z
-opeZZ = OPEII Zy
+opeZZ = OPEII -- Zy
 
--- smart constructor, ya da ya da
+-- smart constructors, ya da ya da
 opeSS :: OPE2 n n' m -> OPE2 (S n) (S n') (S m)
-opeSS (OPEII n) = OPEII (Sy n)
-opeSS p         = OPESS p
+opeSS OPEII = OPEII
+opeSS p     = OPESS p
+
+opeS' :: OPE2 n n' m -> OPE2 (S n) n' (S m)
+opeS' OPEIN = OPEIN
+opeS' p     = OPES' p
+
+ope'S :: OPE2 n n' m -> OPE2 n (S n') (S m)
+ope'S OPENI = OPENI
+ope'S p     = OPE'S p
 
 -- extract left OPE
 lope :: OPE2 n n' m -> OPE n m
-lope (OPEII n) = OPEI n
+lope OPEII     = OPEI
+lope OPEIN     = OPEI
+lope OPENI     = OPEN
 lope (OPESS p) = opeS (lope p)
 lope (OPES' p) = opeS (lope p)
-lope (OPE'S p) = OPE' (lope p)
+lope (OPE'S p) = ope' (lope p)
 
 -- extract right OPE
 rope :: OPE2 n n' m -> OPE n' m
-rope (OPEII n) = OPEI n
+rope OPEII     = OPEI
+rope OPENI     = OPEI
+rope OPEIN     = OPEN
 rope (OPESS p) = opeS (rope p)
-rope (OPES' p) = OPE' (rope p)
 rope (OPE'S p) = opeS (rope p)
-
--- extract doms and cod
-
-ope2Ends :: OPE2 n n' m -> (Natty n, Natty n', Natty m)
-ope2Ends (OPEII m) = (m, m, m)
-ope2Ends (OPESS p) = case ope2Ends p of (n, n', m) -> (Sy n, Sy n', Sy m)
-ope2Ends (OPES' p) = case ope2Ends p of (n, n', m) -> (Sy n,    n', Sy m)
-ope2Ends (OPE'S p) = case ope2Ends p of (n, n', m) -> (   n, Sy n', Sy m)
+rope (OPES' p) = ope' (rope p)
 
 -- construct an OPE2 by growing its left OPE
 opel :: OPE n m -> OPE2 n m m
-opel (OPEI n) = OPEII n
+opel  OPEI    = OPEII
+opel  OPEN    = OPENI
 opel (OPES p) = opeSS (opel p)
-opel (OPE' p) = OPE'S (opel p)
+opel (OPE' p) = ope'S (opel p)
 
 -- construct an OPE2 by growing its right OPE
 oper :: OPE n m -> OPE2 m n m
-oper (OPEI n) = OPEII n
+oper  OPEI    = OPEII
+oper  OPEN    = OPEIN
 oper (OPES p) = opeSS (oper p)
-oper (OPE' p) = OPES' (oper p)
+oper (OPE' p) = opeS' (oper p)
 
 -- if you have two OPEs targeting m', then we can compute the
 -- OPE2 which targets the union of their images, and the OPE which
@@ -214,27 +219,23 @@ oper (OPE' p) = OPES' (oper p)
 -- it's a kind of coproduct calculation, being the smallest thing
 -- supporting both injections
 
-data COPOPE :: Nat -> Nat -> Nat -> * where
-  COPOPE :: OPE2 n n' m -> OPE m m' -> COPOPE n n' m'
-copOPE :: OPE n m' -> OPE n' m' -> COPOPE n n' m'
-copOPE (OPEI n) (OPEI _) = COPOPE (OPEII n)   (OPEI n)
-copOPE (OPEI (Sy n))   q = copOPE (OPES (OPEI n)) q
-copOPE p   (OPEI (Sy n)) = copOPE p (OPES (OPEI n))
-copOPE (OPES p) (OPES q) = case copOPE p q of
-  COPOPE pq r -> COPOPE (opeSS pq) (opeS r)
-copOPE (OPES p) (OPE' q) = case copOPE p q of
-  COPOPE pq r -> COPOPE (OPES' pq) (opeS r)
-copOPE (OPE' p) (OPES q) = case copOPE p q of
-  COPOPE pq r -> COPOPE (OPE'S pq) (opeS r)
-copOPE (OPE' p) (OPE' q) = case copOPE p q of
-  COPOPE pq r -> COPOPE pq (OPE' r)
+data COP :: Nat -> Nat -> Nat -> * where
+  COP :: OPE2 n n' m -> OPE m m' -> COP n n' m'
+cop :: OPE n m' -> OPE n' m' -> COP n n' m'
+cop  OPEI          q  = COP (oper q) OPEI
+cop       p   OPEI    = COP (opel p) OPEI
+cop  OPEN          q  = COP OPENI q
+cop       p   OPEN    = COP OPEIN p
+cop (OPES p) (OPES q) = case cop p q of COP pq r -> COP (opeSS pq) (opeS r)
+cop (OPES p) (OPE' q) = case cop p q of COP pq r -> COP (opeS' pq) (opeS r)
+cop (OPE' p) (OPES q) = case cop p q of COP pq r -> COP (ope'S pq) (opeS r)
+cop (OPE' p) (OPE' q) = case cop p q of COP pq r -> COP pq         (ope' r)
 
 -- Correspondingly, we get the following smart constructor
 -- making thinned relevant pairs from thinned things.
 
 rp :: Th f m -> Th g m -> Th (RP f g) m
-rp (f :< u) (g :< v) = case copOPE u v of
-  COPOPE p w -> RP f p g :< w
+rp (f :< u) (g :< v) = case cop u v of COP p w -> RP f p g :< w
 
 
 ------------------------------------------------------------------------------
@@ -250,23 +251,26 @@ data OPE2ASSOC :: Nat -> Nat -> Nat -> Nat -> Nat -> * where
             -> OPE2ASSOC k l kl m klm
 
 ope2ASSOC :: OPE2 k l kl -> OPE2 kl m klm -> OPE2ASSOC k l kl m klm
-ope2ASSOC (OPEII (Sy k)) q = ope2ASSOC (OPESS (OPEII k)) q
-ope2ASSOC p (OPEII (Sy m)) = ope2ASSOC p (OPESS (OPEII m))
-ope2ASSOC (OPEII Zy) (OPEII Zy) = OPE2ASSOC opeZZ opeZZ
+ope2ASSOC OPEII q     = OPE2ASSOC q (opel (lope q))
+ope2ASSOC OPENI q     = OPE2ASSOC q OPENI
+ope2ASSOC OPEIN q     = OPE2ASSOC OPENI q
+ope2ASSOC p OPEII     = OPE2ASSOC (opel (rope p)) (opel (lope p))
+ope2ASSOC p OPEIN     = OPE2ASSOC OPEIN p
+-- ope2ASSOC p OPENI is covered
 ope2ASSOC p (OPE'S q) = case ope2ASSOC p q of
-  OPE2ASSOC r s -> OPE2ASSOC (OPE'S r) (OPE'S s)
+  OPE2ASSOC r s -> OPE2ASSOC (ope'S r) (ope'S s)
 ope2ASSOC (OPESS p) (OPES' q) = case ope2ASSOC p q of
-  OPE2ASSOC r s -> OPE2ASSOC (OPES' r) (opeSS s)
+  OPE2ASSOC r s -> OPE2ASSOC (opeS' r) (opeSS s)
 ope2ASSOC (OPE'S p) (OPES' q) = case ope2ASSOC p q of
-  OPE2ASSOC r s -> OPE2ASSOC (OPES' r) (OPE'S s)
+  OPE2ASSOC r s -> OPE2ASSOC (opeS' r) (ope'S s)
 ope2ASSOC (OPES' p) (OPES' q) = case ope2ASSOC p q of
-  OPE2ASSOC r s -> OPE2ASSOC r (OPES' s)
+  OPE2ASSOC r s -> OPE2ASSOC r (opeS' s)
 ope2ASSOC (OPESS p) (OPESS q) = case ope2ASSOC p q of
   OPE2ASSOC r s -> OPE2ASSOC (opeSS r) (opeSS s)
 ope2ASSOC (OPE'S p) (OPESS q) = case ope2ASSOC p q of
-  OPE2ASSOC r s -> OPE2ASSOC (opeSS r) (OPE'S s)
+  OPE2ASSOC r s -> OPE2ASSOC (opeSS r) (ope'S s)
 ope2ASSOC (OPES' p) (OPESS q) = case ope2ASSOC p q of
-  OPE2ASSOC r s -> OPE2ASSOC (OPE'S r) (opeSS s)
+  OPE2ASSOC r s -> OPE2ASSOC (ope'S r) (opeSS s)
 
 -- managed to avoid using this, but didn't want to throw it away!
 
@@ -277,9 +281,9 @@ ope2ASSOC (OPES' p) (OPESS q) = case ope2ASSOC p q of
 
 -- normal terms are abstractions or applications of a var to a spine
 data Nm :: Nat -> * where
-  NK :: Nm m -> Nm m
-  NL :: Nm (S m) -> Nm m
-  NE :: Ne m -> Nm m
+  NK :: Nm m      -> Nm m
+  NL :: Nm (S m)  -> Nm m
+  NE :: Ne m      -> Nm m
 deriving instance Show (Nm n)
 instance ShowN Nm where showN = show
 
@@ -302,18 +306,10 @@ instance ShowN Ne where showN = show
 -- relation...
 
 data Sel :: Nat -> Nat -> * where
-  Zs :: Natty n -> Sel (S n) n
+  Zs :: Sel (S n) n
   Ss :: Sel m n -> Sel (S m) (S n)
 
 -- ...and besides, there's info in the inhabitant
-
-selOPE2 :: Sel m n -> OPE2 (S Z) n m
-selOPE2 (Zs n) = OPES' (opel (nOPE n))
-selOPE2 (Ss x) = OPE'S (selOPE2 x)
-
-selDom :: Sel m n -> Natty n
-selDom (Zs n) = n
-selDom (Ss x) = Sy (selDom x)
 
 -- When a Sel and an OPE2 interact, something hits something.
 
@@ -323,25 +319,24 @@ data Which :: Nat -> Nat -> Nat -> * where
   Hit2 :: Sel n0' n0 -> Sel n1' n1 -> OPE2 n0  n1 m -> Which n0' n1' m
 
 which :: Sel m' m -> OPE2 n0' n1' m' -> Which n0' n1' m
-which x (OPEII (Sy m)) = which x (OPESS (OPEII m))
-which (Zs m) (OPES' p) = case ope2Ends p of
-  (n0, n1, _) -> Hit0 (Zs n0)         p
-which (Zs m) (OPE'S p) = case ope2Ends p of
-  (n0, n1, _) -> Hit1         (Zs n1) p
-which (Zs m) (OPESS p) = case ope2Ends p of
-  (n0, n1, _) -> Hit2 (Zs n0) (Zs n1) p
+which x  OPEII     = Hit2 x  x  OPEII
+which x  OPEIN     = Hit0 x     OPEIN
+which x  OPENI     = Hit1    x  OPENI
+which Zs (OPES' p) = Hit0 Zs    p
+which Zs (OPE'S p) = Hit1    Zs p
+which Zs (OPESS p) = Hit2 Zs Zs p
 which (Ss x) (OPESS p) = case which x p of
   Hit0 y   q -> Hit0 (Ss y)        (opeSS q)
   Hit1   z q -> Hit1        (Ss z) (opeSS q)
   Hit2 y z q -> Hit2 (Ss y) (Ss z) (opeSS q)
 which (Ss x) (OPES' p) = case which x p of
-  Hit0 y   q -> Hit0 (Ss y)        (OPES' q)
-  Hit1   z q -> Hit1            z  (OPES' q)
-  Hit2 y z q -> Hit2 (Ss y)     z  (OPES' q)
+  Hit0 y   q -> Hit0 (Ss y)        (opeS' q)
+  Hit1   z q -> Hit1            z  (opeS' q)
+  Hit2 y z q -> Hit2 (Ss y)     z  (opeS' q)
 which (Ss x) (OPE'S p) = case which x p of
-  Hit0 y   q -> Hit0     y         (OPE'S q)
-  Hit1   z q -> Hit1        (Ss z) (OPE'S q)
-  Hit2 y z q -> Hit2     y  (Ss z) (OPE'S q)
+  Hit0 y   q -> Hit0     y         (ope'S q)
+  Hit1   z q -> Hit1        (Ss z) (ope'S q)
+  Hit2 y z q -> Hit2     y  (Ss z) (ope'S q)
 
 
 ------------------------------------------------------------------------------
@@ -354,9 +349,7 @@ nsub (x :< p) (NL t) (s :< u) = abst $ nsub (Ss x :< OPES p) t (s :< OPE' u)
 nsub x        (NE t)  s       = hsub x t s
 
 abst :: Th Nm (S m) -> Th Nm m
-abst (t :< OPE' w)      = NK t :< w
-abst (t :< OPES w)      = NL t :< w
-abst (t :< OPEI (Sy m)) = NL t :< OPEI m
+abst (t :< w) = ope2S (NK t :<) (NL t :<) w
 
 hsub :: Th (Sel n') m -> Ne n' -> Th Nm m -> Th Nm m
 hsub _        NV              s = s
@@ -367,7 +360,7 @@ hsub (x :< p) (NA (RP f q a)) s = apply $ case which x q of
 
 apply :: (Th Nm m, Th Nm m) -> Th Nm m
 apply (NK t :< u, _) = t :< u
-apply (NL t :< u, s) = nsub (Zs (fst (opeEnds u)) :< u) t s
+apply (NL t :< u, s) = nsub (Zs :< u) t s
 apply (NE f :< u, s) = (NE . NA) ^$ rp (f :< u) s
 
 
@@ -390,22 +383,27 @@ instance ShowN f => ShowN (Th f) where
 -- THE JIGGER
 ------------------------------------------------------------------------------
 
-class LT n m where
-  theVar :: Natty n -> Fin m
+class LE n m where
+  embed :: OPE n m
 
-instance LT Z (S Z) where
-  theVar Zy = OPEI (Sy Zy)
+instance LE Z Z where
+  embed = OPEI
 
-instance LT Z (S m) => LT Z (S (S m)) where
-  theVar Zy = OPE' (theVar Zy)
+instance LE Z m => LE Z (S m) where
+  embed = OPE' embed
 
-instance LT n m => LT (S n) (S m) where
-  theVar (Sy n) = fE (theVar n)
+instance LE n m => LE (S n) (S m) where
+  embed = case (embed :: OPE n m) of
+    OPEI   -> OPEI
+    OPE' p -> OPE' (jig p)
 
-la :: forall n. NATTY n =>
-      ((forall m. LT n m => Tm m) -> Tm (S n))
+jig :: OPE n m -> OPE (S n) (S m)
+jig OPEI     = OPEI
+jig (OPE' p) = OPE' (jig p)
+
+la :: forall n. ((forall m. LE (S n) m => Tm m) -> Tm (S n))
    -> Tm n
-la f = L (f (V (theVar (natty :: Natty n))))
+la f = L (f (V (embed <^> (fZ :: Fin (S n)))))
 
 cl :: Tm Z -> Tm Z
 cl = id
