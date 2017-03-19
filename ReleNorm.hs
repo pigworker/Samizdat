@@ -352,11 +352,6 @@ which (Ss x) (OPE'S p) = case which x p of
 -- HEREDITARY SUBSTITUTION
 ------------------------------------------------------------------------------
 
-abst :: Th Nm (S m) -> Th Nm m
-abst (t :< OPE' w)      = NK t :< w
-abst (t :< OPES w)      = NL t :< w
-abst (t :< OPEI (Sy m)) = NL t :< OPEI m
-
 nsub :: Th (Sel m') m -> Nm m' -> Th Nm m -> Th Nm m
 nsub x (NK t) s = NK ^$ nsub x t s
 nsub (x :< p) (NL t) (s :< u) = abst $ nsub (Ss x :< OPES p) t (s :< OPE' u)
@@ -365,6 +360,11 @@ nsub (x :< p) (NA (RP One y ts)) s = case which x y of
   Hit1    z q ->
     NA ^$ rp (One :< p <^> lope q) (spsub (z :< p <^> rope q) ts s)
   Hit2 y' z q -> applies s (spsub (z :< p <^> rope q) ts s)
+
+abst :: Th Nm (S m) -> Th Nm m
+abst (t :< OPE' w)      = NK t :< w
+abst (t :< OPES w)      = NL t :< w
+abst (t :< OPEI (Sy m)) = NL t :< OPEI m
 
 spsub :: Th (Sel n') m -> Sp n' -> Th Nm m -> Th Sp m
 spsub (x :< p) (SS (RP ts q t)) s = case which x q of
