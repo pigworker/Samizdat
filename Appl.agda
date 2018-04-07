@@ -105,11 +105,11 @@ module APPL (F : Set -> Set)(AF : Appl F) where
   pc : forall {R S T} -> (f : S -> T)(gF : F (R -> S))(rF : F R) ->
          (pure f <*> (gF <*> rF)) == ((pure (comp f) <*> gF) <*> rF)
   pc {R}{S}{T} f gF rF rewrite composition (pure f) gF rF
-                   | homomorphism {S -> T}{(R -> S) -> R -> T} (\ f g r -> f (g r)) f = refl
+                   | homomorphism {S -> T}{(R -> S) -> R -> T} comp f = refl
 
   ppc : forall {R S T} -> (f : S -> T)(g : R -> S)(rF : F R) ->
          (pure f <*> (pure g <*> rF)) == (pure (comp f g) <*> rF)
-  ppc {R}{S}{T} f g rF rewrite pc f (pure g) rF | homomorphism (\ g r -> f (g r)) g = refl
+  ppc {R}{S}{T} f g rF rewrite pc f (pure g) rF | homomorphism (comp f) g = refl
 
   lemma : forall {S T} Az Bz (f : All id Az -> S -> T)(aFz : All F Az)(s : All id Bz -> S)(bFz : All F Bz) ->
             ((pure f <*> run Az aFz) <*> (pure s <*> run Bz bFz)) ==
@@ -133,8 +133,8 @@ module APPL (F : Set -> Set)(AF : Appl F) where
   claim : forall {T}(a : Appl' T) -> [! a !]0 == [! [! a !]1 !]N
   claim {T} [ t ] rewrite homomorphism {One}{T -> _} _,_ <>
                         | composition {T}{One * T}{T} (pure snd) (pure (_,_ <>)) t
-                        | homomorphism {One * T -> T}{(T -> One * T) -> _} (\ f g r -> f (g r)) snd
-                        | homomorphism {T -> One * T}{T -> T} (\ g r -> snd (g r)) (_,_ <>)
+                        | homomorphism {One * T -> T}{(T -> One * T) -> _} comp snd
+                        | homomorphism {T -> One * T}{T -> T} (comp snd) (_,_ <>)
                         | identity t = refl
   claim (pure' t) rewrite homomorphism {One}{_} (\ _ -> t) <> = refl
   claim (f' <*>' s') rewrite claim f' | claim s' = lemma (Types [! f' !]1) (Types [! s' !]1) (report [! f' !]1) (tasks [! f' !]1) (report [! s' !]1) (tasks [! s' !]1)
