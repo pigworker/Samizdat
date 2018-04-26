@@ -129,8 +129,8 @@ data _==_ {l}{X : Set l}(x : X) : X -> Set where
 ------------------------------------------------------------------------------
 
 record Sg (S : Set)(T : S -> Set) : Set where
-  constructor _,_
-  field               fst : S ;  snd : T fst
+  constructor        _,_
+  field      fst : S  ;  snd : T fst
 open Sg
 
 _*_ _+_ : Set -> Set -> Set
