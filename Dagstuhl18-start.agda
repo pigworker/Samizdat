@@ -1,4 +1,4 @@
-module Dagstuhl18 where
+module Dagstuhl18-start where
 
 {-----------------------------------------------------------------------------
   CHEESE TALK - Conor McBride in
@@ -692,10 +692,6 @@ force (footle F d p) | rr c , k  = rr c , \ r -> footle F d (k r)
 
 
 
-
-
-
-
 {----}
 ------------------------------------------------------------------------------
 -- CONTAINER DRIVERS (IN MEMORIAM MARK E SMITH)
@@ -771,13 +767,11 @@ open SYNC ; open SYNCADJUNCTION
 
 
 
-
-
 {----}
 ------------------------------------------------------------------------------
 -- CONTAINER DRIVING
 ------------------------------------------------------------------------------
-
+{-+}
 drive : forall {I J} (_~_ : I -> J -> Set)(Hi : I |> I)(Lo : J |> J)
           (D : Driver _~_ Hi Lo){Q : Ix I} ->
 
@@ -785,12 +779,14 @@ drive : forall {I J} (_~_ : I -> J -> Set)(Hi : I |> I)(Lo : J |> J)
 
 drive _~_ Hi Lo D = mkSyncR-:> _~_ {Q = FIx Lo _}
   (handle Hi {Q = PiSyncL _~_ _}
-    (\ { q s       -> return (_ , q , s) })
-    (\ { (c , k) s -> let c' , D' = D s c in ! c' , \ r' ->
-                      let r  , s' = D' r' in k r s' })
+    (\ { q s       -> {!!} })
+    (\ { (c , k) s -> {!!} })
   )
-
+{+-}
 ------------------------------------------------------------------------------
+
+
+
 
 
 
@@ -818,13 +814,14 @@ fordOut (_ , q , refl) = q
 fordIn : forall {I}{Q : Ix I} -> [ Q -:> SgSyncR _==_ Q ]
 fordIn q = (_ , q , refl)
 
+{-+}
 fordDrive : forall {I}(Hi Lo : I |> I)(D : Driver _==_ Hi Lo){Q : Ix I}
                ->
                     [ FIx Hi Q -:> FIx Lo Q ]
 
 fordDrive Hi Lo D t =
   (return - fordOut) =<< drive _==_ Hi Lo D (fordIn t)
-
+{+-}
 ------------------------------------------------------------------------------
 
 
@@ -856,9 +853,9 @@ driveCo _~_ Hi Lo D {Q} = footle Lo {P = SgSyncR _~_ _} help where
   help : [ SgSyncR _~_ (CoFIx Hi Q) -:>
            SgSyncR _~_ Q +: Lo $ SgSyncR _~_ (CoFIx Hi Q) ]
   help (_ , t , s) with force t
-  ... | (ll q)      = ll _ , q , s
-  ... | (rr c , k)  = rr let c' , D' = D s c in c' , \ r' ->
-                         let r  , s' = D' r' in _ , k r , s'
+  ... | (tt , q)      = tt , _ , q , s
+  ... | (ff , c , k)  = ff , let c' , D' = D s c in c' , \ r' ->
+                             let r  , s' = D' r' in _ , k r , s'
 
 fordDriveCo : forall {I}(Hi Lo : I |> I)(D : Driver _==_ Hi Lo){Q : Ix I} ->
              [ CoFIx Hi Q -:> CoFIx Lo Q ]
@@ -924,21 +921,37 @@ next (Star C) = peterHan C
 ------------------------------------------------------------------------------
 -- "BASH"
 ------------------------------------------------------------------------------
-
+{-+}
 run : forall {I}(C : I |> I){Q : I -> Set}
-      ->
-          [ FIx (Star C) Q -:> FIx C Q ]
+        ->
+            [ FIx (Star C) Q -:> FIx C Q ]
 
-run C {Q} = handle (Star C) {Q} {FIx C Q} return (\\ help) where
+run C {Q} = handle (Star C) {Q} {FIx C Q} {!!} {!!} where
+{+-}
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{-+}
   help : forall {o}
          (t : FIx C (ko One) o)
          (k : (s : Responses C t) -> FIx C Q (peterHan C o t s))
       -> FIx C Q o
          
-  help (return <>) k = k <>
-  help (! c , j)   k = ! c , \ r -> help (j r) \ rs -> k (r , rs)
-
+  help (return <>) k = {!!}
+  help (! c , j)   k = {!!}
+{+-}
 ------------------------------------------------------------------------------
 
 
@@ -962,24 +975,51 @@ run C {Q} = handle (Star C) {Q} {FIx C Q} return (\\ help) where
 ------------------------------------------------------------------------------
 -- "CoBASH"
 ------------------------------------------------------------------------------
-
+{-+}
 runCo : forall {I}(C : I |> I){Q : I -> Set}
         ->
             [ CoFIx (C & Star C) Q -:> CoFIx C Q ]
 
-runCo C {Q} = footle C {CoFIx (C & Star C) Q}{Q} help where
+runCo C {Q} = footle C {CoFIx (C & Star C) Q}{Q} {!!} where
+{+-}
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{-+}
   help : [ CoFIx (C & Star C) Q -:> Q +: C $ CoFIx (C & Star C) Q ]
   help t with force t
-  ... | ll q            = ll q
-  ... | rr (c , j) , k  = rr c , \ r -> buff (j r) \ rs -> k (r , rs) where
+  ... | ll q            = {!!}
+  ... | rr (c , j) , k  = {!!} where
+
+
+
+
+
+
+
+
+
+
+
 
     buff : forall {o}(t : FIx C (ko One) o) ->
            ((s : Responses C t) -> CoFIx (C & Star C) Q (peterHan C o t s)) ->
            CoFIx (C & Star C) Q o
     buff (return <>) k = k <>
     buff (! c , j)   k = !! (c , j) , k
-
+{+-}
 ------------------------------------------------------------------------------
 
 
@@ -1046,6 +1086,30 @@ infixr 3 rd_ wr_
 LooseInterface : (Status * Status) |> (Status * Status)
 LooseInterface = (FH (Read (Char + One)) >|< FH (Write Char)) |+| Exn (ko One)
 
+{-+}
+loosen : forall {Q} -> [ CoFIx LooseInterface Q -:> CoFIx TightInterface Q ]
+loosen = runCo _ - fordDriveCo _ _ \
+  { q c -> {!!}
+  }
+{+-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{-
 loosen : forall {Q} -> [ CoFIx LooseInterface Q -:> CoFIx TightInterface Q ]
 loosen = runCo _ - fordDriveCo _ _ \
   { {i = i} refl (ll c)  ->
@@ -1063,7 +1127,7 @@ loosen = runCo _ - fordDriveCo _ _ \
   ; {i = closed , closed} refl raise ->
      (raise , boom)                      , (\\ boom)
   }
-
+-}
 ------------------------------------------------------------------------------
 
 
@@ -1087,25 +1151,13 @@ loosen = runCo _ - fordDriveCo _ _ \
 ------------------------------------------------------------------------------
 -- COPYING FILES
 ------------------------------------------------------------------------------
-
+{-+}
 copyGo : CoFIx LooseInterface BothClosed (opened , opened)
-force copyGo = rr (rd fact <>) , \
-  { (ll c)  -> !! (wr fact c) , \ _ -> copyGo
-  ; (rr <>) -> !! (rd fclose) , \ _ ->
-               !! (wr fclose) , \ _ ->
-               retCo <>
-  }
+copyGo = {!!}
 
 cp : Path -> Path -> CoFIx TightInterface BothClosed (closed , closed)
-cp src trg = loosen (
-  !! (rd fopen src) , \
-  { tt -> !! (wr fopen trg) , \
-      { tt -> copyGo
-      ; ff -> !! raise , boom
-      }
-  ; ff -> !! raise , boom
-  } )
-
+cp src trg = {!!}
+{+-}
 ------------------------------------------------------------------------------
 
 
@@ -1125,22 +1177,20 @@ cp src trg = loosen (
 -- HANCOCK'S PI IS NOT FOR ALL
 ------------------------------------------------------------------------------
 
+{-+}
 StatIx : (S : Set) -> S |> S
 
-Comm (StatIx S) s = One + S
+StatIx S = {!!}
+{+-}
 
-Resp (StatIx S) s (ll <>) = < (s ==_) >
-next (StatIx S) s (tt , <>) (.s , refl) = s
-
-Resp (StatIx S) s (rr s') = One
-next (StatIx S) s (ff , s') <>          = s'
-
+{-+}
 get : forall {S}{s : S} -> FIx (StatIx S) (\ s -> < (s ==_) >) s
-get = ! (ll <>) , \ { (s , refl) -> return (s , refl) }
-
+get = {!!}
+{+-}
+{-+}
 got : forall {S}{s : S} -> FIx (StatIx S) (\ s -> < (s ==_) >) s
-got {s = s} = return (s , refl)
-
+got = {!!}
+{+-}
 
 
 
