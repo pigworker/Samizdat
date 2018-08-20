@@ -2,6 +2,8 @@ module CompLam where
 
 import Control.Monad.State
 
+import BigArray
+
 data Inst
   = Push Int | PushReg | Restack | Swap | Pop
   | Cons | Decons
@@ -13,7 +15,7 @@ data Exit = Jump Int | Return
 
 type Block = ([Inst], Exit)
 
-type Heap v = (Int, [v])
+type Heap v = (Int, Arr Int v)
 
 type Prog = Heap Block
 type Store = Heap (Int, Int)
@@ -21,13 +23,14 @@ type Store = Heap (Int, Int)
 alloc :: v -> State (Heap v) Int
 alloc v = do
   (n, vs) <- get
-  put (n + 1, v : vs)
+  put (n + 1, insertArr (n, v) vs)
   return n
 
 hunt :: Int -> State (Heap v) v
 hunt i = do
   (n, vs) <- get
-  return (vs !! (n - 1 - i))
+  let Just v = findArr i vs
+  return v
 
 type Config =
   ( Int -- register
@@ -83,8 +86,23 @@ compile is (s :+ t) k = do
   compile [] t s'
 
 topLevel :: Tm -> (Int, Prog)
-topLevel t = runState p (0, [])
+topLevel t = runState p (0, emptyArr)
   where
     p = do
       ret <- alloc ([], Return)
       compile [] t ret
+
+---
+
+cze :: Tm
+cze = L (L (V 0))
+
+csu :: Tm
+csu = L (L (L (V 1 :$ ((V 2 :$ V 1) :$ V 0))))
+
+c2 :: Tm
+c2 = csu :$ (csu :$ cze)
+
+nsu :: Tm
+nsu = L (N 1 :+ V 0)
+
