@@ -83,7 +83,7 @@ compile is (N n) k = alloc (is ++ [Load n], Jump k)
 compile is (s :+ t) k = do
   add <- alloc ([Add], Jump k)
   s' <- compile [Restack] s add
-  compile [PushReg] t s'
+  compile (is ++ [PushReg]) t s'
 
 topLevel :: Tm -> (Int, Prog)
 topLevel t = runState p (0, emptyArr)
