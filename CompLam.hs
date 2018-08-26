@@ -82,8 +82,8 @@ compile is (f :$ s) k = do
 compile is (N n) k = alloc (is ++ [Load n], Jump k)
 compile is (s :+ t) k = do
   add <- alloc ([Add], Jump k)
-  s' <- compile [PushReg] s add
-  compile [] t s'
+  s' <- compile [Restack] s add
+  compile [PushReg] t s'
 
 topLevel :: Tm -> (Int, Prog)
 topLevel t = runState p (0, emptyArr)
@@ -91,6 +91,10 @@ topLevel t = runState p (0, emptyArr)
     p = do
       ret <- alloc ([], Return)
       compile [] t ret
+
+try :: Tm -> (Int, Store)
+try t = run p (Jump e) (negate 1, [], (0, emptyArr)) where
+  (e, p) = topLevel t
 
 ---
 
