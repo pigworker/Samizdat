@@ -16,6 +16,12 @@ data T23 (n :: Nat) (k :: *) (v :: *) where
   Node3  :: T23 n k v -> (k, v) -> T23 n k v -> (k, v) -> T23 n k v -> T23 (Su n) k v
 deriving instance (Show k, Show v) => Show (T23 n k v)
 
+instance Functor (T23 n k) where
+  fmap f Leaf = Leaf
+  fmap f (Node2 l (k, v) r) = Node2 (fmap f l) (k, f v) (fmap f r)
+  fmap f (Node3 l (j, u) m (k, v) r) =
+    Node3 (fmap f l) (j, f u) (fmap f m) (k, f v) (fmap f r)
+
 data I23 n k v where
   Level :: T23 n k v -> I23 n k v
   Grow2 :: T23 n k v -> (k, v) -> T23 n k v -> I23 n k v
@@ -62,6 +68,9 @@ data Arr (k :: *)(v :: *) where
   Arr :: T23 n k v -> Arr k v
 deriving instance (Show k, Show v) => Show (Arr k v)
 
+instance Functor (Arr k) where
+  fmap f (Arr t) = Arr (fmap f t)
+
 emptyArr :: Arr k v
 emptyArr = Arr Leaf
 
@@ -92,12 +101,14 @@ travArr f (Arr t) = Arr <$> travT23 f t
 foldMapArr :: Monoid x => ((k, v) -> x) -> Arr k v -> x
 foldMapArr f = getConst . travArr (Const . f)
 
-instance (Ord k, Monoid v) => Monoid (Arr k v) where  -- SEMIGROUP v!
-  mempty = emptyArr
-  mappend l r = appEndo (foldMapArr up l) r where
+instance (Ord k, Semigroup v) => Semigroup (Arr k v) where
+  l <> r = appEndo (foldMapArr up l) r where
     up (k, v) = Endo $ \ r -> case findArr k r of
-      Just w  -> insertArr (k, mappend v w) r
+      Just w  -> insertArr (k, v <> w) r
       Nothing -> insertArr (k, v) r
+
+instance (Ord k, Semigroup v) => Monoid (Arr k v) where
+  mempty = emptyArr
 
 type Set x = Arr x ()
 
