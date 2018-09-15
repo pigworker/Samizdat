@@ -4,12 +4,12 @@
 module Circ where
 
 import Data.List
+import Data.List.Extra
 import Data.Function
 import Data.Traversable
 import Control.Applicative
 import Control.Arrow
 import Control.Monad
-import GHC.Exts
 
 import BigArray
 
@@ -231,7 +231,7 @@ pairSub (SubPartition p f) (SubPartition q g) = SubPartition (Sep p q) $ \ t ->
   L <$> f t <|> R <$> g t
 
 refineSub :: forall t x. (Eq t, Ord x) => SubPartition t -> (t -> x) -> SubPartition t
-refineSub (SubPartition (Part ts) f) ob = subPartition (groupWith ob ts)
+refineSub (SubPartition (Part ts) f) ob = subPartition (groupSortOn ob ts)
 refineSub (SubPartition (Sep p q) f) ob = pairSub
   (refineSub (SubPartition p (unL <=< f)) ob)
   (refineSub (SubPartition q (unR <=< f)) ob)
