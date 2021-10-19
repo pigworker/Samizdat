@@ -45,6 +45,9 @@ _=>_ : Con -> Con -> Set
 [_]t : forall {F G} -> F => G -> forall {X} -> [ F ]o X -> [ G ]o X
 [_]t {F} {G} t (s , k) = [ G ]m k (t s)
 
+[_]r : forall {F G} -> (forall {X} -> [ F ]o X -> [ G ]o X) -> F => G
+[ f ]r s = f (s , \ p -> p)
+
 I : Con
 I = One <! \ _ -> One
 
@@ -52,18 +55,22 @@ _!>>_ : Con -> Con -> Con
 (S <! P) !>> (S' <! P') = [ S' <! P' ]o S <! \ (s' , k) -> P' s' >< (k - P)
 
 id : {F : Con} -> F => F
-id s = s , \ p -> p
+id {F} = [_]r {F}{F} \ x -> x
+
+comp : {F G : Con}{X : Set} -> [ G ]o ([ F ]o X) -> [ F !>> G ]o X
+comp (s , k) = (s , k - fst) , \ (p , p') -> snd (k p) p'
+
+pmoc : {F G : Con}{X : Set} -> [ F !>> G ]o X -> [ G ]o ([ F ]o X)
+pmoc ((s , f) , k) = s , \ p -> f p , ((p ,_) - k)
 
 map : (F : Con){G H : Con} -> G => H -> (G !>> F) => (H !>> F)
-map F gh (s , k) = (s , k - gh - fst) , \ (p , p') -> p , snd (gh (k p)) p'
+map F {G}{H} gh = [ pmoc {G}{F} - [ F ]m [ gh ]t - comp {H}{F} ]r 
 
 pam : {F G : Con}(H : Con) -> F => G -> (H !>> F) => (H !>> G)
-pam H fg (s , k)
-  = ([ fg ]t (s , k))
-  , \ (p , p') -> snd (fg s) p , p'
+pam {F}{G}H fg = [ pmoc {H}{F} - [ fg ]t - comp {H}{G} ]r
 
 rid : {F : Con} -> F => (F !>> I)
-rid s = (<> , \ _ -> s) , snd
+rid {F} s = (<> , \ _ -> s) , snd
 
 dir : {F : Con} -> (F !>> I) => F
 dir (<> , s) = s <> , \ p -> <> , p
@@ -72,12 +79,11 @@ dil : {F : Con} -> (I !>> F) => F
 dil (s , _) = s , (_, <>)
 
 asso : {F G H : Con} -> ((F !>> G) !>> H) => (F !>> (G !>> H))
-asso (s , k) = ((s , (k - fst)) , \ (p , p') -> snd (k p) p')
-             , \ ((p , p') , p'') -> p , (p' , p'')
-
+asso {F}{G}{H} = [ pmoc{F !>> G}{H} - [ H ]m (pmoc{F}{G})
+                 - comp{G}{H} - comp{F}{G !>> H} ]r
 
 _=>=_ : {F G H : Con} -> F => G -> G => H -> F => H
-(fg =>= gh) s = fst (gh (fst (fg s))) , \ p -> snd (fg s) (snd (gh (fst (fg s))) p)
+(fg =>= gh) = [ [ fg ]t - [ gh ]t ]r
 
 here : {F : Con} -> Div F => I
 here (s , h) = <> , \ _ -> h
