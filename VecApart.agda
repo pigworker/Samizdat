@@ -1,6 +1,12 @@
+{-# OPTIONS --prop #-}
+
 module VecApart where
 
-data Zero : Set where
+data Ff : Prop where
+record Zero : Set where
+  constructor bad
+  field
+    dab : Ff
 record One : Set where constructor <>
 data Two : Set where ff tt : Two
 record _><_ (S : Set)(T : S -> Set) : Set where
@@ -16,6 +22,19 @@ _+_ : Set -> Set -> Set
 S + T = Two >< \ { ff -> S ; tt -> T }
 infixr 20 _><_ _*_
 infixr 10 _+_
+la_ : forall {l S T}{P : S >< T -> Set l}
+  -> ((s : S) -> (t : T s) -> P (s , t))
+  -> (x : S >< T) -> P x
+la_ f (s , t) = f s t
+infixr 0 la_
+
+_<?>_ : forall {l}{P : Two -> Set l}
+     -> P ff -> P tt -> (b : Two) -> P b
+(pf <?> pt) ff = pf
+(pf <?> pt) tt = pt
+
+ko_ : forall {k l}{X : Set k}{Y : X -> Set l} -> (x : X)(y : Y x) -> X
+(ko x) y = x
 
 module _ {X : Set} where
   _*:_ _+:_ _-:>_ : (X -> Set) -> (X -> Set) -> (X -> Set)
@@ -29,6 +48,13 @@ module _ {X : Set} where
   <_> [_] : (X -> Set) -> Set
   < P > = X >< P
   [ P ] = forall {x} -> P x
+
+_$>_ : forall {i j k}
+       {A : Set i}{B : A -> Set j}{C : (a : A) -> B a -> Set k}
+       (f : (a : A) -> B a)
+       (g : {a : A}(b : B a) -> C a b)
+       (a : A) -> C a (f a)
+(f $> g) a = g (f a)
 
 data Nat : Set where
   ze : Nat
@@ -145,8 +171,6 @@ open _<=>_ public
 
 module _ {X : Set} where
 
-  postulate irr# : forall {n}{xs : Vec X n}(p q : # xs) -> p ~ q
-
   diffDist : {x y : X} -> x ~/~ y -> # x ,- y ,- []
   diffDist nq x (_ ^- _ ^- ())
   diffDist nq x (_ ^- (.x ,- ()))
@@ -178,12 +202,22 @@ Dec X = (X -> Zero) + X
 DecEq : Set -> Set
 DecEq X = (x y : X) -> Dec (x ~ y)
 
-module _ (X : Set)(_~?_ : DecEq X) where
+record Datoid : Set1 where
+  constructor _/~?_
+  field
+    Data : Set
+    _~?_ : (x y : Data) -> Dec (x ~ y)
+
+module _ (D : Datoid) where
+  module Private where
+    X = Datoid.Data D
+    _~?_ = Datoid._~?_ D
+  open Private
 
   dec- : forall {n}{xs : Vec X n} -> DecEq (X - xs)
   dec- (x , p) (y , q) with x ~? y
   dec- (x , p) (y , q)  | ff , nq = ff , \ { r~ -> nq r~ }
-  dec- (x , p) (.x , q) | tt , r~ = tt , (!~ x ,_ ~$~ irr# p q)
+  dec- (x , p) (.x , q) | tt , r~ = tt , r~
 
   seek : forall {n}(xs : Vec X n) -> # xs ->
          (x : X) -> # x ,- xs + x <- xs
@@ -206,8 +240,48 @@ module _ (X : Set)(_~?_ : DecEq X) where
     l2r2l dIso x | ff , w = r~
     l2r2l dIso x | tt , w = r~
     r2l2r dIso (ff , x , w) with seek xs xd x
-    r2l2r dIso (ff , x , w) | ff , v = !~ ff ,_ ~$~ (!~ x ,_ ~$~ irr# v w)
+    r2l2r dIso (ff , x , w) | ff , v = r~
     r2l2r dIso (ff , x , w) | tt , v with () <- w x (x ,- v)
     r2l2r dIso (tt , x , w) with seek xs xd x
     r2l2r dIso (tt , x , w) | ff , v with () <- v x (x ,- w)
     r2l2r dIso (tt , x , w) | tt , v = !~ tt ,_ ~$~ (!~ x ,_ ~$~ atMost1 xd v w)
+
+  module _ {n : Nat}(x : X)(xs : Vec X n)(xxd : # x ,- xs) where
+
+    hIso : X - xs <=> X - x ,- xs + < _~ x > 
+    l2r hIso (y , p) with y ~? x
+    l2r hIso (y , p) | ff , n = ff , y , twoDiff p xxd n
+    l2r hIso (y , p) | tt , q = tt , y , q
+    r2l hIso (ff , y , p) = y , y ,- x ^- io ?# p
+    r2l hIso (tt , .x , r~) = x , xxd
+    l2r2l hIso (y , p) with y ~? x
+    l2r2l hIso (y , p) | ff , q = r~
+    l2r2l hIso (y , p) | tt , r~ = r~
+    r2l2r hIso (ff , y , p) with y ~? x
+    r2l2r hIso (ff , y , p) | ff , q = r~
+    r2l2r hIso (ff , y , p) | tt , r~ with () <- p x (x ,- x ,- no)
+    r2l2r hIso (tt , y , r~) with x ~? x
+    r2l2r hIso (tt , y , r~) | ff , q with () <- q r~
+    r2l2r hIso (tt , y , r~) | tt , r~ = r~
+
+open Datoid
+
+record Con : Set1 where
+  constructor _<|_
+  field
+    Sh : Set
+    Po : Sh -> Datoid
+open Con public
+
+record Der (n : Nat)(C : Con)(X : Set) : Set where
+  constructor _<_^_!_
+  field
+    shape : Sh C
+    holes : Vec (Data (Po C shape)) n
+    apart : # holes
+    stuff : Data (Po C shape) - holes -> X
+
+plug : forall {n C X} -> Der (su n) C X -> X -> Der n C X
+plug {C = S <| P} (s < h ,- hs ^ hd ! f) x =
+  let Ps /~? eq? = P s in
+  s < hs ^ h ^- io ?# hd ! (l2r (hIso (P s) h hs hd) $> (la f <?> (ko x)))
