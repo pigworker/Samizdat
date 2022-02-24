@@ -248,21 +248,21 @@ module _ (D : Datoid) where
 
   module _ {n : Nat}(x : X)(xs : Vec X n)(xxd : # x ,- xs) where
 
-    hIso : X - xs <=> X - x ,- xs + < _~ x > 
+    hIso : X - xs <=> X - x ,- xs + One
     l2r hIso (y , p) with y ~? x
     l2r hIso (y , p) | ff , n = ff , y , twoDiff p xxd n
-    l2r hIso (y , p) | tt , q = tt , y , q
+    l2r hIso (y , p) | tt , q = tt , <>
     r2l hIso (ff , y , p) = y , y ,- x ^- io ?# p
-    r2l hIso (tt , .x , r~) = x , xxd
+    r2l hIso (tt , <>) = x , xxd
     l2r2l hIso (y , p) with y ~? x
     l2r2l hIso (y , p) | ff , q = r~
     l2r2l hIso (y , p) | tt , r~ = r~
     r2l2r hIso (ff , y , p) with y ~? x
     r2l2r hIso (ff , y , p) | ff , q = r~
     r2l2r hIso (ff , y , p) | tt , r~ with () <- p x (x ,- x ,- no)
-    r2l2r hIso (tt , y , r~) with x ~? x
-    r2l2r hIso (tt , y , r~) | ff , q with () <- q r~
-    r2l2r hIso (tt , y , r~) | tt , r~ = r~
+    r2l2r hIso (tt , <>) with x ~? x
+    r2l2r hIso (tt , <>) | ff , q with () <- q r~
+    r2l2r hIso (tt , <>) | tt , r~ = r~
 
 open Datoid
 
