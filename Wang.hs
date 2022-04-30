@@ -3,6 +3,7 @@ module Wang where
 
 import Data.Monoid
 import Control.Newtype
+import Data.List
 
 humpty :: (Newtype n o, Monoid o) => n
 humpty = pack mempty
@@ -26,7 +27,19 @@ data Anxiety
       -- left go the countermodels in which the var is a hypo
       -- right go the countermodels in which the var is a goal
       -- all splits, left and right, are on strictly higher vars
-  deriving Show
+
+instance Show Anxiety where
+  show Chill = "Always"
+  show Yikes = "Never"
+  show a = "Except for " ++ intercalate ", or " (map mo (go a)) where
+    go Chill = []
+    go Yikes = [([], [])]
+    go (Split h i g) =
+      [(i : hs, gs) | (hs, gs) <- go h] ++
+      [(hs, i : gs) | (hs, gs) <- go g]
+    mo (hs, []) = "all of " ++ show hs
+    mo ([], gs) = "none of " ++ show gs
+    mo (hs, gs) = show hs ++ " but not " ++ show gs
 
 instance Eq Anxiety where
   Chill == Chill = True
@@ -63,7 +76,7 @@ instance Monoid Anxiety where
   mappend a@(Split hi i gi) b@(Split hj j gj) = case compare i j of
     LT -> split (hi <> b) i (gi <> b)
     EQ -> split (hi <> hj) i (gi <> gj)
-    GT -> split (a <> hj) j (gj <> b)
+    GT -> split (a <> hj) j (a <> gj)
 
 hypo :: Int -> Anxiety -> Anxiety
 hypo i Chill = Chill
@@ -104,3 +117,64 @@ gnaw' (N p)      = wang p
 
 (==>) :: Fmla -> Fmla -> Anxiety
 h ==> g = appEndo (wang g <> gnaw h) Yikes
+
+
+---------------------------
+
+allOf :: [Fmla] -> Fmla
+allOf [] = T
+allOf [x] = x
+allOf (x : xs) = x :/\: allOf xs
+
+someOf :: [Fmla] -> Fmla
+someOf [] = F
+someOf [x] = x
+someOf (x : xs) = x :\/: someOf xs
+
+oneOf :: [Fmla] -> Fmla
+oneOf [] = F
+oneOf [x] = x
+oneOf (x : xs) =
+  (x :/\: allOf [N y | y <- xs]) :\/: (N x :/\: oneOf xs)
+
+ham :: [(Int, Int)] -- edges
+    -> Fmla
+ham es =
+  -- every node is in exactly one position
+  allOf [oneOf [nodePos i p | p <- [1 .. l]] | i <- ns]
+  :/\:
+  -- every edge present is somewhere in the path
+  allOf [N (edgeIn x) :\/:
+         someOf [(nodePos i p :/\: nodePos j (p + 1)) :\/:
+                 (nodePos j p :/\: nodePos i (p + 1))
+                | p <- [1 .. l-1]]
+        | (x, (i, j)) <- xes]
+  :/\:
+  -- every step in the path is an edge
+  allOf [ someOf [ edgeIn x :/\:
+                   ((nodePos i p :/\: nodePos j (p + 1)) :\/:
+                    (nodePos j p :/\: nodePos i (p + 1)))
+                 | (x, (i, j)) <- xes]
+        | p <- [1 .. l-1]]
+  where
+  xes = zip [0..] es
+  e = length es
+  ns = nub (es >>= ((pure . fst) <> (pure . snd)))
+  n = 10 * (1 + maximum ns)
+  l = length ns
+  nodePos i p = V (p * n + i)
+  edgeIn x = V (n * n + x)
+
+dual :: [(Int,Int)] -> [(Int,Int)]
+dual es = go xes where
+  go [] = []
+  go ((x, (i, j)) : xes) =
+    [(x, y) | (y, (k, l)) <- xes, any (`elem` [k, l]) [i, j]]
+    ++ go xes
+  xes = zip [0..] es
+
+koenigsberg :: [(Int, Int)]
+koenigsberg = [(0,1),(0,1),(0,2),(0,2),(0,3),(1,3),(2,3)]
+
+main :: IO ()
+main = print $ ham (dual koenigsberg) ==> F
