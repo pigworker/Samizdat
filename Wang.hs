@@ -143,6 +143,9 @@ ham es =
   -- every node is in exactly one position
   allOf [oneOf [nodePos i p | p <- [1 .. l]] | i <- ns]
   :/\:
+  -- every position has exactly one node
+  allOf [oneOf [nodePos i p | i <- ns] | p <- [1 .. l]]  
+  :/\:
   -- every edge present is somewhere in the path
   allOf [N (edgeIn x) :\/:
          someOf [(nodePos i p :/\: nodePos j (p + 1)) :\/:
@@ -165,6 +168,30 @@ ham es =
   nodePos i p = V (p * n + i)
   edgeIn x = V (n * n + x)
 
+eul :: [(Int, Int)] -- edges
+    -> Fmla
+eul es =
+  -- every edge occurs exactly once
+  allOf [oneOf [edgePos e p | p <- [1..l]]
+        | (e, (i, j)) <- xes]
+  :/\:
+  -- every position has exactly one edge
+  allOf [oneOf [edgePos e p | (e, _) <- xes]
+        | p <- [1..l]]
+  :/\:
+  allOf [ N (edgePos e 1) :\/: path i 2 :\/: path j 2
+        | (e, (i, j)) <- xes]
+  where
+  xes = zip [0..] es
+  l = length xes
+  edgePos e p = V (l * p + e)
+  path _ p | p >= l = T
+  path i p = someOf
+    (
+    [edgePos e p :/\: path j (p+1) | (e, (q, j)) <- xes, i == q] ++
+    [edgePos e p :/\: path j (p+1) | (e, (j, q)) <- xes, i == q]
+    )
+
 dual :: [(Int,Int)] -> [(Int,Int)]
 dual es = go xes where
   go [] = []
@@ -176,5 +203,10 @@ dual es = go xes where
 koenigsberg :: [(Int, Int)]
 koenigsberg = [(0,1),(0,1),(0,2),(0,2),(0,3),(1,3),(2,3)]
 
+clique :: Int -> [(Int, Int)]
+clique n = go 0 where
+  go i | i >= n = []
+  go i = [(i, j) | j <- [i+1 .. n-1]] ++ go (i+1)
+
 main :: IO ()
-main = print $ ham (dual koenigsberg) ==> F
+main = print $ eul koenigsberg ==> F
