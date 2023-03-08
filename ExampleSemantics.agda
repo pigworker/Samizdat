@@ -85,21 +85,18 @@ data Exp : Ty -> Set where
   Eq : forall {t} -> Exp t -> Exp t -> Exp two
 
 data _=>_ : {t : Ty} -> Exp t -> Exp t -> Set where
-  IfT : forall {t}{x y : Exp t} -> If T x y => x
-  IfF : forall {t}{x y : Exp t} -> If F x y => y
-  IfEval : forall {t}{p q : Exp two}{x y : Exp t}
-        -> p => q -> If p x y => If q x y
+  IfT    : forall {t}{x y : Exp t} -> If T x y => x
+  IfF    : forall {t}{x y : Exp t} -> If F x y => y
+  IfEval : forall {t p q}{x y : Exp t} -> p => q -> If p x y => If q x y
   SuEval : forall {x y} -> x => y -> Su x => Su y
   EqSame : forall {t}{x : Exp t} -> Eq x x => T
-  EqS0 : forall {x} -> Eq (Su x) Ze => F
-  Eq0S : forall {x} -> Eq Ze (Su x) => F
-  EqSS : forall {x y} -> Eq (Su x) (Su y) => Eq x y
-  -- what about Eq T F and Eq F T?
-  EqTF : Eq T F => F
-  EqFT : Eq F T => F
-  --
-  EqL : forall {t}{x y z : Exp t} -> x => z -> Eq x y => Eq z y
-  EqR : forall {t}{x y z : Exp t} -> y => z -> Eq x y => Eq x z
+  EqS0   : forall {x} -> Eq (Su x) Ze => F
+  Eq0S   : forall {x} -> Eq Ze (Su x) => F
+  EqSS   : forall {x y} -> Eq (Su x) (Su y) => Eq x y
+  EqTF   : Eq T F => F  -- I added this...
+  EqFT   : Eq F T => F  -- ...and this
+  EqL    : forall {t}{x y z : Exp t} -> x => z -> Eq x y => Eq z y
+  EqR    : forall {t}{x y z : Exp t} -> y => z -> Eq x y => Eq x z
 
 Va : Ty -> Set
 Va two = Two
@@ -114,21 +111,18 @@ ev T = tt
 ev F = ff
 ev Ze = 0
 ev (Su e) = su (ev e)
-ev (If e y n) with ev e
-... | ff = ev n
-... | tt = ev y
+ev (If e t f) = (ev f <ft> ev t) (ev e)
 ev (Eq e f) = fst (vaEq? (ev e) (ev f))
 
 ve : forall {t} -> Va t -> Exp t
 ve {two} ff = F
 ve {two} tt = T
-ve {nat} ze = Ze
+ve {nat} ze     = Ze
 ve {nat} (su v) = Su (ve v)
 
-_=>*_ : {t : Ty} -> Exp t -> Exp t -> Set
-x =>* y = Star _=>_ x y
+_=>*_ = \ {t} -> Star (_=>_ {t})
 
-ev=>* : {t : Ty}(x : Exp t) -> x =>* ve (ev x)
+ev=>* : {t : Ty}(x : Exp t) -> Star _=>_ x (ve (ev x))
 ev=>* T = []
 ev=>* F = []
 ev=>* Ze = []
@@ -137,7 +131,8 @@ ev=>* (If x y n) with ev x | ev=>* x
 ... | ff | p = star _ IfEval p ++ (IfF ,- ev=>* n)
 ... | tt | p = star _ IfEval p ++ (IfT ,- ev=>* y)
 ev=>* (Eq x y) with ev x | ev=>* x | ev y | ev=>* y
-... | x' | xp | y' | yp = star _ EqL xp ++ (star _ EqR yp ++ help _ x' y' (vaEq? x' y')) where
+... | x' | xp | y' | yp =
+  star _ EqL xp ++ (star _ EqR yp ++ help _ x' y' (vaEq? x' y')) where
   help : (t : Ty)(x' y' : Va t)(z : Dec (x' ~ y'))
       -> Eq (ve x') (ve y') =>* ve (fst z)
   help t x' .x' (tt , r~) = EqSame ,- []
@@ -174,9 +169,8 @@ stepEv (EqL {x = x} {z = z} e) with ev x | ev z | stepEv e
 stepEv (EqR {y = y} {z} e) with ev y | ev z | stepEv e
 ... | y' | .y' | r~ = r~
 
-
 diamond : forall {t : Ty}{s p q : Exp t} -> s => p -> s => q
-      -> Exp t >< \ r -> (p =>* r) * (q =>* r)
+       -> Exp t >< \ r -> (p =>* r) * (q =>* r)
 diamond {s = s} sp sq = ve (ev s) , help sp , help sq where
   help : forall {t}{x y : Exp t} -> x => y -> y =>* ve (ev x)
   help {t}{x}{y} e with ev x | ev y | stepEv e | ev=>* y
