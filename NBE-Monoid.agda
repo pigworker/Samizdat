@@ -62,15 +62,25 @@ lexic LT _ = LT
 lexic EQ o = o
 lexic GT _ = GT
 
-merge : forall {X} -> (X -> X -> Ord) -> (X -> Fwd X -> Fwd X)
-     -> Fwd X -> Fwd X -> Fwd X
+module _ {X : Set}(cmp : X -> X -> Ord)(glu : X -> Fwd X -> Fwd X) where
+  insert : X -> Fwd X -> Fwd X
+  insert x [] = x ,- []
+  insert x (y ,- ys) with cmp x y
+  ... | LT = x ,- (y ,- ys)
+  ... | EQ = glu x ys
+  ... | GT = y ,- insert x ys
+  merge : Fwd X -> Fwd X -> Fwd X
+  merge [] ys = ys
+  merge (x ,- xs) ys = insert x (merge xs ys)
+
+{-
 merge cmp glu (x ,- xs) (y ,- ys) with cmp x y
 ... | LT = x ,- merge cmp glu xs (y ,- ys)
 ... | EQ = glu x (merge cmp glu xs ys)
-... | GT = y ,- merge cmp glu xs ys
+... | GT = y ,- merge cmp glu (x ,- xs) ys
 merge cmp glu [] ys = ys
 merge cmp glu xs [] = xs
-
+-}
 module _ {X : Set} where
 
   data _<=_ : Bwd X -> Bwd X -> Set where
@@ -475,3 +485,5 @@ quev {Ga}{T} t = quo T (val T t idEnv)
 -- quev (mo (MX tt) (cat (elt (va (no -, `2))) non))
 -- quev (mo (MX tt) (cat (elt (va (no {_}{[]} -, `2))) (elt (va (no -, `2)))))
 -- quev (mo (MF `2) (cat (cat (elt (va (no -, _))) (elt (va (no -, _ -^ _)))) (cat neu (elt (va (no -, _ -^ _ -^ _))))))
+-- quev (mo (MV tt) (cat (elt (va (no{_}{[]} -^ _ -, _))) (elt (va (no{_}{[]} -, _ -^ _)))))
+-- quev (mo (MV tt) (cat (elt (va (no{_}{[]} -, _ -^ _))) (elt (va (no{_}{[]} -^ _ -, _)))))
