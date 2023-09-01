@@ -1,5 +1,8 @@
 module NBE-Monoid where
 
+data _~_ {X : Set}(x : X) : X -> Set where
+  r~ : x ~ x
+
 data Zero : Set where
 record One : Set where constructor <>
 data Two : Set where ff tt : Two
@@ -52,6 +55,21 @@ sod ff tt = diff <>
 sod tt ff = diff <>
 sod tt tt = same
 
+data Ord : Set where LT EQ GT : Ord
+
+lexic : Ord -> Ord -> Ord
+lexic LT _ = LT
+lexic EQ o = o
+lexic GT _ = GT
+
+merge : forall {X} -> (X -> X -> Ord) -> (X -> Fwd X -> Fwd X)
+     -> Fwd X -> Fwd X -> Fwd X
+merge cmp glu (x ,- xs) (y ,- ys) with cmp x y
+... | LT = x ,- merge cmp glu xs (y ,- ys)
+... | EQ = glu x (merge cmp glu xs ys)
+... | GT = y ,- merge cmp glu xs ys
+merge cmp glu [] ys = ys
+merge cmp glu xs [] = xs
 
 module _ {X : Set} where
 
@@ -74,6 +92,17 @@ module _ {X : Set} where
   (th -^ .s) -< (ph -, s) = (th -< ph) -^ s
   (th -, .s) -< (ph -, s) = (th -< ph) -, s
   [] -< [] = []
+
+  thOrd : forall {De Xi Ga Om} -> De <= Ga -> Xi <= Om -> Ord
+  thOrd (th -^ _) (ph -^ _) = thOrd th ph
+  thOrd (th -^ _) (ph -, _) = GT
+  thOrd (th -^ _) [] = GT
+  thOrd (th -, _) (ph -^ _) = LT
+  thOrd (th -, _) (ph -, _) = thOrd th ph
+  thOrd (th -, _) [] = GT
+  thOrd [] (ph -^ s) = LT
+  thOrd [] (ph -, s) = LT
+  thOrd [] [] = EQ
 
 data Ty : Set where
   `0 `1 `2   : Ty
@@ -114,6 +143,98 @@ data _!=_ Ga where
      -> Ga != M -> Ga != N -> Ga != MP M N
   cru : forall {S T}{M : Mon T}
      -> Ga != MF S -> (Ga -, S) != M -> Ga != M
+
+data Nat : Set where
+  ze : Nat
+  su : Nat -> Nat
+{-# BUILTIN NATURAL Nat #-}
+
+natOrd : Nat -> Nat -> Ord
+natOrd ze ze = EQ
+natOrd ze (su y) = LT
+natOrd (su x) ze = GT
+natOrd (su x) (su y) = natOrd x y
+
+twoOrd : Two -> Two -> Ord
+twoOrd ff ff = EQ
+twoOrd ff tt = LT
+twoOrd tt ff = GT
+twoOrd tt tt = EQ
+
+tyOrd : Ty -> Ty -> Ord
+tyOrd (Li S) (Li T) = tyOrd S T
+tyOrd (S `* U) (T `* V) = lexic (tyOrd S T) (tyOrd U V)
+tyOrd (S `-> U) (T `-> V) = lexic (tyOrd S T) (tyOrd U V)
+tyOrd S T = natOrd (tc S) (tc T) where
+  tc : Ty -> Nat
+  tc `0 = 0
+  tc `1 = 1
+  tc `2 = 2
+  tc (Li _) = 3
+  tc (_ `* _) = 4
+  tc (_ `-> _) = 5
+
+monOrd : forall {S T} -> Mon S -> Mon T -> Ord
+monOrd (MV a) (MV b) = twoOrd a b
+monOrd (MX a) (MX b) = twoOrd a b
+monOrd (MF S) (MF T) = tyOrd S T
+monOrd (MA S) (MA T) = tyOrd S T
+monOrd (ML S M) (ML T N) = lexic (tyOrd S T) (monOrd M N)
+monOrd (MP M O) (MP N P) = lexic (monOrd M N) (monOrd O P)
+monOrd M N = natOrd (mc M) (mc N) where
+  mc : forall {T} -> Mon T -> Nat
+  mc M1 = 0
+  mc (MV _) = 1
+  mc (MX _) = 2
+  mc (MF _) = 3
+  mc (MA _) = 4
+  mc (ML _ _) = 5
+  mc (MP _ _) = 6
+
+tmOrd : forall {Ga De S T} -> Ga !- S -> De !- T -> Ord
+moOrd : forall {Ga De S T}{M : Mon S}{N : Mon T} -> Ga != M -> De != N -> Ord
+tmOrd (va x) (va y) = thOrd x y
+tmOrd (mo M x) (mo N y) = lexic (monOrd M N) (moOrd x y)
+tmOrd (bo ff) (bo ff) = EQ
+tmOrd (bo ff) (bo tt) = LT
+tmOrd (bo tt) (bo ff) = GT
+tmOrd (bo tt) (bo tt) = EQ
+tmOrd (if a t f) (if b u g) = lexic (tmOrd a b) (lexic (tmOrd t u) (tmOrd f g))
+tmOrd (pa a c) (pa b d) = lexic (tmOrd a b) (tmOrd c d)
+tmOrd (pl a) (pl b) = tmOrd a b
+tmOrd (pr a) (pr b) = tmOrd a b
+tmOrd (la a) (la b) = tmOrd a b
+tmOrd (ap f a) (ap g b) = lexic (tmOrd f g) (tmOrd a b)
+tmOrd a b = natOrd (cx a) (cx b) where
+  cx : forall {Ga T} -> Ga !- T -> Nat
+  cx (va x) = 0
+  cx (mo _ _) = 1
+  cx <> = 2
+  cx (bo _) = 3
+  cx (if _ _ _) = 4
+  cx (pa _ _) = 5
+  cx (pl _) = 6
+  cx (pr _) = 7
+  cx (la _) = 8
+  cx (ap _ _) = 9
+moOrd (elt x) (elt y) = tmOrd x y
+moOrd (cat m o) (cat n p) = lexic (moOrd m n) (moOrd o p)
+moOrd (one x) (one y) = tmOrd x y
+moOrd (act x) (act y) = tmOrd x y
+moOrd (lam m) (lam n) = moOrd m n
+moOrd (twa m o) (twa n p) = lexic (moOrd m n) (moOrd o p)
+moOrd (cru m o) (cru n p) = lexic (moOrd m n) (moOrd o p)
+moOrd x y = natOrd (mc x) (mc y) where
+  mc : forall {Ga T}{M : Mon T} -> Ga != M -> Nat
+  mc neu = 0
+  mc (elt _) = 1
+  mc (cat _ _) = 2
+  mc non = 3
+  mc (one _) = 4
+  mc (act _) = 5
+  mc (lam _) = 6
+  mc (twa _ _) = 7
+  mc (cru _ _) = 8
 
 _^t_ : forall {Ga De T} -> Ga !- T -> Ga <= De -> De !- T
 _^m_ : forall {Ga De T}{M : Mon T} -> Ga != M -> Ga <= De -> De != M
@@ -261,11 +382,11 @@ neutral (MP M N) = neutral M , neutral N
 
 concatenate : forall {Ga T}(M : Mon T) -> MVal Ga M -> MVal Ga M -> MVal Ga M
 concatenate M1 <> <> = <>
-concatenate (MV n) (ff , x) (ff , y) = ff , (x >>> y)  -- should be nub merge
+concatenate (MV n) (ff , x) (ff , y) = ff , merge tmOrd _,-_ x y
 concatenate (MV n) (ff , x) (tt , y) = tt , <>
 concatenate (MV n) (tt , <>) (c , y) = tt , <>
-concatenate (MX n) (ff , x) (c , y) = not c , (x >>> y)
-concatenate (MX n) (tt , x) (c , y) = c , (x >>> y)
+concatenate (MX n) (ff , x) (c , y) = not c , merge tmOrd (\ _ xs -> xs) x y
+concatenate (MX n) (tt , x) (c , y) = c , merge tmOrd (\ _ xs -> xs) x y
 concatenate (MF T) x y = x >>> y
 concatenate (MA T) f g De th t = f De th (g De th t)
 concatenate (ML S M) f g De th s = concatenate M (f De th s) (g De th s)
@@ -350,5 +471,7 @@ quev {Ga}{T} t = quo T (val T t idEnv)
 
 
 -- quev (mo (MV tt) (cat (elt (va (no -, `2))) non))
+-- quev (mo (MV tt) (cat (elt (va (no {_}{[]} -, `2))) (elt (va (no -, `2)))))
 -- quev (mo (MX tt) (cat (elt (va (no -, `2))) non))
+-- quev (mo (MX tt) (cat (elt (va (no {_}{[]} -, `2))) (elt (va (no -, `2)))))
 -- quev (mo (MF `2) (cat (cat (elt (va (no -, _))) (elt (va (no -, _ -^ _)))) (cat neu (elt (va (no -, _ -^ _ -^ _))))))
