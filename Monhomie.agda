@@ -812,6 +812,8 @@ data _/_!=_ De Ga where
   ne : forall {M} -> De / Ga != M
   cr : forall {X M} -> De / Ga != Li X -> [] / Ga !- (X => CR M) -> De / Ga != M
   _&h_ : forall {M N} -> De / Ga != M -> De / Ga != N -> De / Ga != (M ** N)
+  la : forall {S M} -> De / (Ga -, S) != M -> De / Ga != (S => M)
+  ap : forall {S M} -> De / Ga != (S => M) -> [] / Ga !- S -> De / Ga != M
 
 tpr : forall {Ga T} -> T <- Ga -> TY (tup Ga) -> TY T
 tpr ze (_ , t) = t
@@ -832,3 +834,17 @@ mpr {De -, N} (su x) = FST (MN (tup De)) (MN N) -M- mpr x
 [!_!]mh {M = M} (cr l d) = [! l !]mh -M- LIFT _ _ \ ga -> free ([! d !]ty void ga) (MN M)
 [! _&h_ {M} {N} h k !]mh = LAM _ (PAIR (MN M) (MN N)) \ ga ->
   ([! h !]mh -M- APP {M = MN M} ga) &&& ([! k !]mh -M- APP {M = MN N} ga)
+hom [! la b !]mh = \ de ga s -> hom [! b !]mh de (ga , s)
+com ([!_!]mh {De} (la {M = M} b)) des = ext \ ga -> ext \ s ->
+  crush (MN M)
+      (list (\ f -> f s)
+       (list (\ f -> f ga)
+        (list (\ de ga s -> hom [! b !]mh de (ga , s)) des)))
+      ~[ crush (MN M) $~
+        (_ ~[ list (\ f -> f s) $~ mapMap _ _ des > _ ~[ mapMap _ _ des >
+           list (\ a -> hom [! b !]mh a (ga , s)) des
+           < mapMap _ _ des ]~ _ [QED]) >
+  crush (MN M) (list (\ f -> f (ga , s)) (list (hom [! b !]mh) des))
+      ~[ com [! b !]mh des ~$~ r~ >
+  hom [! b !]mh (crush (MN (tup De)) des) (ga , s) [QED]
+[!_!]mh {De} {Ga} {M = M} (ap h s) = LAM (TY (tup Ga)) (MN M) \ ga -> [! h !]mh -M- (APP ga -M- APP ([! s !]ty void ga))
