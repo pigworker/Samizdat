@@ -100,6 +100,7 @@ instance Subbable (Tm s) where
   L b +// Sb n ss m = L (b +// Sb (Sy n) (P ss (NSS (allLeft m)) V) (Sy m))
   K b +// sg = K (b +// sg)
 
+-- and now, the roof lemma
 data Roof :: Nat -> Nat -> Nat -> Type where
   Roof :: l /> k -> Union k q m -> r /> q -> Roof l r m
 
@@ -167,3 +168,107 @@ lemSSS (SNS w) (SSS u) = case lemSSS w u of
 lemSSS (SSS w) (SSS u) = case lemSSS w u of
   LemSSS l' lu w' ru r' -> LemSSS (Sy l') (SSS lu) (SSS w') (SSS ru) (Sy r')
 lemSSS ZZZ ZZZ = LemSSS Zy ZZZ ZZZ ZZZ Zy
+
+
+------------------------------------------------------------------------------
+-- the Jacobian
+------------------------------------------------------------------------------
+
+data Hole :: Sort -> Nat -> Type where
+  Hole :: Hole s n
+
+data JTm
+  :: Sort -- sort of the hole
+  -> Nat  -- scope of the hole
+  -> Sort -- sort of the term
+  -> Nat  -- scope of the term
+  -> Type
+  where
+  JC  :: Cr s d -> Hole s n -> JTm s n (A d) n
+  JPL :: Hole p l -> Union l r n -> Tm q r -> JTm p l (p :*: q) n
+  JPR :: Tm p l -> Union l r n -> Hole q r -> JTm q r (p :*: q) n
+  JL  :: Hole s (S n) -> JTm s (S n) (B s) n
+  JK  :: Hole s n -> JTm s n (B s) n
+
+(*-) :: JTm hs hn ts tn -> Tm hs hn -> Tm ts tn
+JC c Hole    *- t = c :$ t
+JPL Hole u q *- p = P p u q
+JPR p u Hole *- q = P p u q
+JL Hole      *- b = L b
+JK Hole      *- b = K b
+
+data Tube
+  :: Sort -- sort of the hole
+  -> Nat  -- scope of the hole
+  -> Sort -- sort of the term
+  -> Nat  -- scope of the term
+  -> Type
+  where
+  Stop :: Tube s n s n
+  (:*>) :: JTm ms mn ts tn -> Tube hs hn ms mn -> Tube hs hn ts tn
+
+infixr 6 :*>
+
+(**-) :: Tube hs hn ts tn -> Tm hs hn -> Tm ts tn
+Stop       **- t = t
+(j :*> js) **- t = j *- (js **- t)
+
+
+------------------------------------------------------------------------------
+-- Terms with Metavariables
+------------------------------------------------------------------------------
+
+type Name = [(String, Int)]
+
+data MT :: Sort -> Nat -> Type where
+  G :: Tm s n -> MT s n
+  U :: Tu s n -> MT s n
+
+data Tu :: Sort -> Nat -> Type where
+  (:->) :: Tube hs hn ts tn -> St hs hn -> Tu ts tn
+infixr 5 :->
+
+data St :: Sort -> Nat -> Type where
+  Ju :: Tu p l -> Union l r n -> Tu q r -> St (p :*: q) n
+  Me :: Name -> Natty k -> MT (Sb k) n -> St (A Syn) n
+                        -- ^^ ORLY?
+data TM :: Sort -> Nat -> Type where
+  -- the specific theory is built with the constructor constructor
+  (:$$) :: Cr s d -> MT s n -> TM (A d) n
+  -- we then have the general stuff of syntax
+  TV :: TM (A Syn) (S Z)
+  TN :: TM One Z
+  TP :: MT p l -> Union l r n -> MT q r -> TM (p :*: q) n
+  TL :: MT s (S n) -> TM (B s) n
+  TK :: MT s n -> TM (B s) n
+  TM :: Name -> Natty k -> MT (Sb k) n -> TM (A Syn) n
+
+tm :: MT s n -> TM s n
+tm (G (c :$ t))  = c :$$ G t
+tm (G V)         = TV
+tm (G N)         = TN
+tm (G (P p u q)) = TP (G p) u (G q)
+tm (G (L b))     = TL (G b)
+tm (G (K b))     = TK (G b)
+tm (U (Stop :-> Ju p u q)) = TP (U p) u (U q)
+tm (U (Stop :-> Me x n t)) = TM x n t
+tm (U (JC c Hole :*> js :-> s))    = c :$$ U (js :-> s)
+tm (U (JPL Hole u q :*> js :-> p)) = TP (U (js :-> p)) u (G q)
+tm (U (JPR p u Hole :*> js :-> q)) = TP (G p) u (U (js :-> q))
+tm (U (JL Hole :*> js :-> b))      = TL (U (js :-> b))
+tm (U (JK Hole :*> js :-> b))      = TK (U (js :-> b))
+
+mt :: TM s n -> MT s n
+mt (c :$$ G t) = G (c :$ t)
+mt (c :$$ U (js :-> s)) = U (JC c Hole :*> js :-> s)
+mt TV = G V
+mt TN = G N
+mt (TP (G p) u (G q)) = G (P p u q)
+mt (TP (U (js :-> p)) u (G q)) = U (JPL Hole u q :*> js :-> p)
+mt (TP (G p) u (U (js :-> q))) = U (JPR p u Hole :*> js :-> q)
+mt (TP (U p) u (U q)) = U (Stop :-> Ju p u q)
+mt (TL (G b)) = G (L b)
+mt (TL (U (js :-> b))) = U (JL Hole :*> js :-> b)
+mt (TK (G b)) = G (K b)
+mt (TK (U (js :-> b))) = U (JK Hole :*> js :-> b)
+mt (TM x n t) = U (Stop :-> Me x n t)

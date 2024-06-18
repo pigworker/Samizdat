@@ -5,34 +5,30 @@ module Full where
 import Debug.Trace
 
 data Fm' x -- yer maw
-  = V x
-  | Z
-  | D (Fm' x)
-  | S (Fm' x)
-  | F (Fm' x)
+  = V x         -- the variable
+  | Z           -- zero
+  | D (Fm' x)   -- double
+  | S (Fm' x)   -- successor
+  | F (Fm' x)   -- full
   deriving (Eq, Ord, Functor, Foldable, Traversable)
 
-type Fm = Fm' Int
+type Var = Int
+type Fm = Fm' Var
 
 db :: Fm -> Fm
-db Z = Z
+db  Z    = Z
 db (S f) = S (S (db f))
-db f = D f
+db    f  = D f
 
 fu :: Fm -> Fm
-fu Z = Z
+fu  Z    = Z
 fu (S f) = S (db (fu f))
-fu f = F f
+fu    f  = F f
 
 type Store =
   ( Int -- name supply
-  , [(Int, Fm)] -- defs var = nm
+  , [(Var, Fm)] -- defs var = nm
   )
-
-va :: Int -> Store -> Fm
-va x (_ , xns) = case lookup x xns of
-  Just n  -> n
-  Nothing -> V x
 
 nm :: Fm -> Store -> Fm
 nm (V x) ga = va x ga
@@ -41,15 +37,39 @@ nm (S f) ga = S (nm f ga)
 nm (D f) ga = db (nm f ga)
 nm (F f) ga = fu (nm f ga)
 
-sb :: Int -> Fm -> Fm -> Fm
+va :: Var -> Store -> Fm
+va x (_ , xns) = case lookup x xns of
+  Just n  -> n
+  Nothing -> V x
+
+-- you *have* done the occur check, haven't you?
+gro :: Var -> Fm -> Store -> Store
+gro x f (k, xns) = (k, (x, f) : map (sb x f <$>) xns)
+
+sb :: Var -> Fm -> Fm -> Fm
 sb x f (V y) = if x == y then f else V y
 sb x f  Z    = Z
 sb x f (S g) = S (sb x f g)
 sb x f (D g) = db (sb x f g)
 sb x f (F g) = fu (sb x f g)
 
-gro :: Int -> Fm -> Store -> Store
-gro x f (k, xns) = (k, (x, f) : map (sb x f <$>) xns)
+unify :: Fm -> Fm -> Store -> Maybe Store
+unify f g ga = go (nm f ga) (nm g ga) where
+  go f g | trace (show f ++ " =? " ++ show g) False = undefined
+  go f g | f == g = pure ga
+  go f g | f > g  = go g f
+  go (V x) g = case occ x g of
+    False -> pure (gro x g ga)
+    True  -> zee g ga
+  go  Z    g = zee g ga
+  go (D f) g = do
+    (h, ga) <- evn g ga
+    unify f h ga
+  go (S f) g = do
+    (h, ga) <- suu g ga
+    unify f h ga
+  go (F f) (F g) = go f g
+  go _ _ = Nothing
 
 occ :: Int -> Fm -> Bool
 occ x = any (x ==)
@@ -98,23 +118,6 @@ ood (F f) ga = do
   (g, ga) <- suu f ga
   pure (fu g, ga)
 
-unify :: Fm -> Fm -> Store -> Maybe Store
-unify f g ga = go (nm f ga) (nm g ga) where
-  go f g | trace (show f ++ " =? " ++ show g) False = undefined
-  go f g | f == g = pure ga
-  go f g | f > g  = go g f
-  go (V x) g = case occ x g of
-    False -> pure (gro x g ga)
-    True  -> zee g ga
-  go  Z    g = zee g ga
-  go (D f) g = do
-    (h, ga) <- evn g ga
-    unify f h ga
-  go (S f) g = do
-    (h, ga) <- suu g ga
-    unify f h ga
-  go (F f) (F g) = go f g
-  go _ _ = Nothing
 
 instance Show Fm where
   show f = go (nm f (0, [])) where

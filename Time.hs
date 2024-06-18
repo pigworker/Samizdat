@@ -58,7 +58,7 @@ leap :: forall s t x
 leap u k = case mkStep u of
   Dict -> k
 
-type Kripke v s = forall t. LE s t => v t
+type Kripke v t = forall u. LE t u => v u
 
 kripke :: Timed v => v s -> Kripke v s
 kripke v = v &> lesson
@@ -157,6 +157,7 @@ myProg' =
   op Wait >>>= \ _ ->
   op Grab >>>= \ y ->
   op (Emit x) >>>= \ _ ->
+  -- retNow x >>>= \ x ->
   op (Emit y) >>>= \ _ ->
   op Wait >>>= \ _ ->
   op (Emit x) >>>= \ _ ->

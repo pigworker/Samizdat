@@ -37,6 +37,7 @@ data Tm (t :: TmSort) (n :: Nat) :: * where
   (:$)  :: Con s t -> TmOf s n -> Tm t n
   V     :: Tm Syn (S Z)
   A     :: String -> Tm Chk Z
+infixr 5 :$
 
 instance Show (Tm t n) where
   show (c :$ t) = concat [ "(", show c, " ", showSort (conSort c) t, ")"] where
@@ -44,7 +45,8 @@ instance Show (Tm t n) where
   show (A x)    = x
 
 showSort :: forall s n. Sorty s -> TmOf s n -> String
-showSort (Bindy s) (Su t)   = concat ["(. ", showSort s t, ")"]
+showSort (Bindy s) (La t)   = concat ["(x. ", showSort s t, ")"]
+showSort (Bindy s) (Ka t)   = concat ["(_. ", showSort s t, ")"]
 showSort  Unity    _        = "()"
 showSort (Pairy l r) (Pr p u q) = concat
   ["(", showSort l p , " ", show u, " ", showSort r q, ")"]
@@ -125,4 +127,5 @@ instance Subst Un where
   Un /// (Zy, Un, Zy) = Un
 
 instance Subst p => Subst (Su p) where
-  Su p /// (m, sg, n) = Su (p /// (Sy m, Pr sg (ISS (covL n)) V, Sy n))
+  La p /// (m, sg, n) = La (p /// (Sy m, Pr sg (ISS (covL n)) V, Sy n))
+  Ka p /// msgn       = Ka (p /// msgn)

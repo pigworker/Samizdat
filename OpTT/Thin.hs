@@ -57,6 +57,12 @@ weeEnd (IS th) =     weeEnd th
 weeEnd (SS th) = Sy (weeEnd th)
 weeEnd  ZZ     = Zy
 
+thinEqEh :: a <= b -> c <= d -> Maybe (a :=: c, b :=: d)
+thinEqEh (IS th) (IS ph) = do (Refl, Refl) <- thinEqEh th ph; pure (Refl, Refl)
+thinEqEh (SS th) (SS ph) = do (Refl, Refl) <- thinEqEh th ph; pure (Refl, Refl)
+thinEqEh  ZZ      ZZ     =                                    pure (Refl, Refl)
+thinEqEh     _       _   = Nothing
+
 class Thinny (p :: Nat -> *) where
   (-<) :: p n -> n <= m -> p m
 infixl 5 -<
@@ -202,7 +208,30 @@ instance Show (Un n) where
   show Un = "()"
 
 data Su (p :: Nat -> *) (n :: Nat) where
-  Su :: p (S n) -> Su p n
+  La :: p (S n) -> Su p n
+  Ka :: p    n  -> Su p n
 
-instance Shown p => Show (Su p n) where
-  show (Su p) = concat ["(. ", show p, ")"]
+su :: CdB p (S n) -> CdB (Su p) n
+su (p :^ SS th) = La p :^ th
+su (p :^ IS th) = Ka p :^ th
+
+us :: CdB (Su p) n -> CdB p (S n)
+us (La p :^ th) = p :^ SS th
+us (Ka p :^ th) = p :^ IS th
+
+data Span (l :: Nat)(r :: Nat) :: * where
+  Span :: n <= l -> n <= r -> Span l r
+deriving instance Show (Span l r)
+
+pub :: l <= m -> r <= m -> Span l r
+pub (IS th) (IS ph) = pub th ph
+pub (IS th) (SS ph) = case pub th ph of Span th' ph' -> Span     th'  (IS ph')
+pub (SS th) (IS ph) = case pub th ph of Span th' ph' -> Span (IS th')     ph'
+pub (SS th) (SS ph) = case pub th ph of Span th' ph' -> Span (SS th') (SS ph')
+pub  ZZ      ZZ     =                                   Span  ZZ       ZZ
+
+ioEh :: n <= m -> Maybe (n :=: m)
+ioEh th = weeEnd th =?= bigEnd th
+
+subThinEh :: l <= m -> n <= m -> Maybe (l <= n)
+subThinEh th ph = case pub th ph of Span th' ph' -> do Refl <- ioEh th'; pure ph'
