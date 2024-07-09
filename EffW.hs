@@ -43,7 +43,7 @@ deriving instance (forall x. Show (f x)) => Show (Some f)
 -- Time
 ------------------------------------------------------------------------------
 
-data Time = Tick Time
+data Time
 
 class Timed (v :: Time -> Type) where
   (&>) :: v s -> s &> t -> v t
@@ -111,7 +111,7 @@ split (s :* t) f = f (kripke s) (kripke t)
 ------------------------------------------------------------------------------
 
 data Step (s :: Time)(t :: Time) :: Type where
-  (:/:) :: Ty -> (String, Int) -> Step t (Tick t)
+  (:/:) :: Ty -> (String, Int) -> Step t t
 
 data Ty
   = E (String, Int)
@@ -250,7 +250,6 @@ data W (r :: Time -> Type)(i :: Time) :: Type where
   VSch :: String -> W Schime i
   Inst :: Schime i -> W Tyme i
   Make :: [(String, Int)] -> Tyme i -> (String, Int) -> W (K ()) i
-  Defn :: Tyme i -> (String, Int) -> W (K ()) i
   Barf :: W f i
 
 instance Timed (W r) where
@@ -259,7 +258,6 @@ instance Timed (W r) where
   tick (Inst s) u = Inst (tick s u)
   tick (Make ds t x) u = Make ds (tick t u) x
   tick Barf u = Barf
-
 
 
 ------------------------------------------------------------------------------
@@ -280,9 +278,7 @@ guessing :: K (String, Int) i -> TiMo W Schime i -> TiMo W Schime i
 guessing e (RetNow s) = RetNow (gen (unK e) s)
 guessing (K e) (Call c@(Make ds (Ty t) x) k) = case (e == x, dep e t) of
   (True, True)  -> op Barf
-  (True, False) ->
-    op (Defn (Ty t) x) >>>= \ v ->
-    foldr (guessing . K) (k lesson v) ds
+  (True, False) -> foldr (guessing . K) (k (Now :< (t :/: x)) (K ())) ds
   (False, True) -> Call (Make (e : ds) (Ty t) x) k
   (False, False) -> Call c $ \ u r -> guessing (K e) (k u r)
 guessing e (Call c k) = Call c $ \ u r -> guessing (e &> u) (k u r)
@@ -305,7 +301,6 @@ bloc (Call c k) = Call c $ \ u r -> bloc (k u r)
 
 run :: TiMo W f i -> Maybe (Some f)
 run (RetNow r) = Just (Some r)
-run (Call (Defn (Ty t) x) k) = run (k (Now :< (t :/: x)) (K ()))
 run _ = Nothing
 
 
