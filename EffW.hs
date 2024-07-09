@@ -246,10 +246,19 @@ mkStep u = case (foo, baz) of
 ------------------------------------------------------------------------------
 
 data W (r :: Time -> Type)(i :: Time) :: Type where
-  Next :: W (K Int) i
-  VSch :: String -> W Schime i
-  Inst :: Schime i -> W Tyme i
-  Make :: [(String, Int)] -> Tyme i -> (String, Int) -> W (K ()) i
+  Next -- next fresh number, please (handled by nonce)
+    :: W (K Int) i
+  VSch -- look up the program variable...
+    :: String      -- ...with this name, and...
+    -> W Schime i  -- tell me its type scheme
+  Inst -- instantiate (handled by bloc)...
+    :: Schime i  -- ...this type scheme...
+    -> W Tyme i  -- ...to this type (by guessing the type parameters)
+  Make -- make a definition (handled by guessing)...
+    :: [(String, Int)]  -- ...with these dependencies to be extruded...
+    -> Tyme i           -- ...of this type...
+    -> (String, Int)    -- ...for this variable
+    -> W (K ()) i
   Barf :: W f i
 
 instance Timed (W r) where
@@ -264,34 +273,58 @@ instance Timed (W r) where
 -- Handlers
 ------------------------------------------------------------------------------
 
-decl :: Timed v => String -> Schime i -> TiMo W v i -> TiMo W v i
-decl x s (Call (VSch y) k) | x == y = decl x s (k Now s)
-decl x s (RetNow v) = retNow v
-decl x s (Call c k) = Call c $ \ u r -> decl x (s &> u) (k u r)
-
+-- handle Next...
 nonce :: Timed v => Int -> TiMo W v i -> TiMo W v i
+-- ...by giving the next number and rehandling the continuation with increment
 nonce n (Call Next k) = nonce (n + 1) (k Now (K n))
+-- forward everything else
 nonce n (RetNow v) = RetNow v
 nonce n (Call c k) = Call c $ \ u r -> nonce n (k u r)
 
+-- handle VSch...
+decl :: Timed v => String -> Schime i -> TiMo W v i -> TiMo W v i
+-- ...by giving the scheme if we're looking up this decl
+decl x s (Call (VSch y) k) | x == y = decl x s (k Now s)
+-- forward everything else, but...
+decl x s (RetNow v) = retNow v
+-- ...be sure to update the scheme in the light of progress
+decl x s (Call c k) = Call c $ \ u r -> decl x (s &> u) (k u r)
+
+-- handle Make, but also do generalisation (note we're computing type schemes)
 guessing :: K (String, Int) i -> TiMo W Schime i -> TiMo W Schime i
-guessing e (RetNow s) = RetNow (gen (unK e) s)
+-- when Make shows up, we have four possibilities
 guessing (K e) (Call c@(Make ds (Ty t) x) k) = case (e == x, dep e t) of
-  (True, True)  -> op Barf
-  (True, False) -> foldr (guessing . K) (k (Now :< (t :/: x)) (K ())) ds
-  (False, True) -> Call (Make (e : ds) (Ty t) x) k
-  (False, False) -> Call c $ \ u r -> guessing (K e) (k u r)
+  -- (is it me?, do I occur in the definiens)
+  (True, True)  -- it's me and the occur check failed; oh noes!
+    -> op Barf
+  (True, False)  -- it's me, so extrude my dependencies and substitute me!
+    -> foldr (guessing . K) (k (Now :< (t :/: x)) (K ())) ds
+  (False, True)  -- it's not me, but I occur, so extrude me!
+    -> Call (Make (e : ds) (Ty t) x) k
+  (False, False)  -- it's nothing to do with me, so leave alone!
+    -> Call c $ \ u r -> guessing (K e) (k u r)
+-- nobody made me; I could be anything; pawn becomes queen!
+guessing e (RetNow s) = RetNow (gen (unK e) s)
+-- forward the rest (the update is a no-op)
 guessing e (Call c k) = Call c $ \ u r -> guessing (e &> u) (k u r)
 
+-- handle Inst requests
+--   (this is fatsemi in Gundry-McBride-McKinna
+--   , doorstop in Krishnaswami-Dunfield)
 bloc :: TiMo W Tyme i -> TiMo W Schime i
+-- if we're instantiating a monotype, we're done
 bloc (Call (Inst (Sch (T t))) k) = bloc $ k Now (Ty t)
+-- if we're instantiating a polytime, we're inventing a fresh existential var
+-- and guessing it
 bloc (Call (Inst (Sch (P s))) k) =
   fresh "x" >>>= \ e -> 
   guessing e . bloc $ (
     op (Inst (stan (Sch s) (tiE e))) >>>= \ t ->
     k lesson t
     )
+-- return wraps the type
 bloc (RetNow (Ty t)) = RetNow (Sch (T t))
+-- otherwise forward
 bloc (Call c k) = Call c $ \ u r -> bloc (k u r)
 
 
@@ -310,50 +343,72 @@ run _ = Nothing
 
 data Tm
   = V String
-  | L String Tm
-  | A Tm Tm
-  | D (String, Tm) Tm
+  | String :=> Tm
+  | Tm :$ Tm
+  | (String, Tm) :/ Tm
   deriving Show
 
-fresh :: String -> TiMo W (K (String, Int)) i
-fresh x = op Next >>>= \ i -> retNow (kmap (x,) i)
+infixr 3 :/
+infixr 4 :=>
+infixl 5 :$
 
+-- pick a fresh existential variable using Next
+fresh :: String -> TiMo W (K (String, Int)) i
+fresh x =
+  op Next >>>= \ i ->
+  retNow (kmap (x,) i)
+
+-- ensure that a type is a function type, giving back source and target
 funTy :: Tyme i -> TiMo W (Tyme :* Tyme) i
+-- if it's already a function type, crack on!
 funTy (Ty (s :-> t)) = retNow (Ty s :* Ty t)
+-- otherwise, invent a function type and constrain
 funTy u =
   op (Inst (Sch (P (P (T (U 1 :-> U 0)))))) >>>= \ f ->
   unify (kripke u) f >>>= \ _ ->
   funTy f
 
+-- guess a type
 guess :: TiMo W Tyme i
 guess = op (Inst (Sch (P (T (U 0)))))
 
+-- make types the same!
 unify :: Tyme i -> Tyme i -> TiMo W (K ()) i
+-- if they're already the same, we're done
+-- (note that catches trivial occur check failures, leaving only bad ones)
 unify a b | a == b = retNow (K ())
+-- rigid-rigid decomposition
 unify (Ty (s0 :-> t0)) (Ty (s1 :-> t1)) =
+  -- make the patvars Kripke
   kripkefy (Ty s0) $ \ s0 -> kripkefy (Ty t0) $ \ t0 ->
   kripkefy (Ty s1) $ \ s1 -> kripkefy (Ty t1) $ \ t1 ->
+  -- solve the subproblems
   unify s0 s1 >>>= \ _ ->
   unify t0 t1
+-- flex problem? demand a definition!
 unify (Ty (E e)) t = op (Make [] t e)
 unify t (Ty (E e)) = op (Make [] t e)
+-- anything else is hopeless
 unify _ _ = op Barf
 
 infer :: Tm -> TiMo W Tyme i
-infer (V x) = op (VSch x) >>>= \ s -> op (Inst s)
-infer (L x b) =
-  guess >>>= \ s ->
-  decl x (tiT s) (infer b) >>>= \ t ->
-  retNow (tiArr s t)
-infer (A f a) =
-  infer f >>>= \ ft ->
-  infer a >>>= \ at ->
-  funTy ft >>>= \ st -> (split st $ \ s t ->
-    unify at s >>>= \ _ ->
-    retNow t)
-infer (D (x, d) b) =
-  bloc (infer d) >>>= \ s ->
-  decl x s (infer b)
+infer (V x) =
+  op (VSch x) >>>= \ s ->  -- look up the declaration
+  op (Inst s)              -- instantiate it
+infer (x :=> b) =
+  guess >>>= \ s ->                      -- guess the domain
+  decl x (tiT s) (infer b) >>>= \ t ->   -- declare x monomorphically
+  retNow (tiArr s t)                     -- assemble the function type
+infer (f :$ a) =
+  infer f >>>= \ ft ->        -- infer the function's type
+  infer a >>>= \ at ->        -- infer the argument's type
+  funTy ft >>>= \ st ->       -- see the function's type as a function type
+    split st $ \ s t ->       -- split into domain and codomain
+      unify at s >>>= \ _ ->  -- unify argument's type with domain
+      retNow t                -- give back the codomain
+infer ((x, d) :/ b) =
+  bloc (infer d) >>>= \ s ->  -- get a type scheme for the definiens
+  decl x s (infer b)          -- declare the definiendum and infer the body
 
 
 ------------------------------------------------------------------------------
@@ -364,3 +419,9 @@ what's :: Tm -> Maybe Sch
 what's t = case run . nonce 0 . bloc $ infer t of
   Just (Some (Sch s)) -> Just s
   _ -> Nothing
+
+skk :: Maybe Sch
+skk =  what's $
+  ("s", "f" :=> "a" :=> "g" :=> V "f" :$ V "g" :$ (V "a" :$ V "g")) :/
+  ("k", "x" :=> "g" :=> V "x") :/
+  V "s" :$ V "k" :$ V "k"
