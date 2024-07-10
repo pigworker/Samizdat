@@ -1,8 +1,8 @@
 {-# LANGUAGE DataKinds, GADTs, KindSignatures, RankNTypes, StandaloneDeriving,
     QuantifiedConstraints, LambdaCase, ScopedTypeVariables, TypeOperators,
     TypeFamilies, UndecidableInstances, ConstraintKinds, TupleSections,
-    IncoherentInstances, OverlappingInstances,
-    TypeOperators #-}
+    IncoherentInstances, OverlappingInstances, PatternSynonyms,
+    ViewPatterns, TypeOperators #-}
 
 module EffW where
 
@@ -124,8 +124,20 @@ newtype Tyme (t :: Time) = Ty Ty deriving (Show, Eq)
 tiE :: K (String, Int) t -> Tyme t
 tiE (K e) = Ty (E e)
 
-tiArr :: Tyme t -> Tyme t -> Tyme t
-tiArr (Ty a) (Ty b) = Ty (a :-> b)
+data UnArrEh (i :: Time) where
+  UnArrAye :: Kripke Tyme i -> Kripke Tyme i -> UnArrEh i
+  UnArrNaw :: UnArrEh i
+
+unArrEh :: Tyme i -> UnArrEh i
+unArrEh (Ty (s :-> t)) = kripkefy (Ty s) $ \ s -> kripkefy (Ty t) $ \ t ->
+  UnArrAye s t
+unArrEh _ = UnArrNaw
+
+pattern (:-&>) :: Kripke Tyme i -> Kripke Tyme i -> Tyme i
+pattern s :-&> t <- (unArrEh -> UnArrAye s t)
+
+(-&>) :: Tyme t -> Tyme t -> Tyme t
+Ty a -&> Ty b = Ty (a :-> b)
 
 instance Timed Tyme where
   tick (Ty t) (r :/: x) = Ty (go t) where
@@ -248,7 +260,7 @@ mkStep u = case (foo, baz) of
 data W (r :: Time -> Type)(i :: Time) :: Type where
   Next -- next fresh number, please (handled by nonce)
     :: W (K Int) i
-  VSch -- look up the program variable...
+  VSch -- look up the program variable (handled by decl)...
     :: String      -- ...with this name, and...
     -> W Schime i  -- tell me its type scheme
   Inst -- instantiate (handled by bloc)...
@@ -290,24 +302,6 @@ decl x s (RetNow v) = retNow v
 -- ...be sure to update the scheme in the light of progress
 decl x s (Call c k) = Call c $ \ u r -> decl x (s &> u) (k u r)
 
--- handle Make, but also do generalisation (note we're computing type schemes)
-guessing :: K (String, Int) i -> TiMo W Schime i -> TiMo W Schime i
--- when Make shows up, we have four possibilities
-guessing (K e) (Call c@(Make ds (Ty t) x) k) = case (e == x, dep e t) of
-  -- (is it me?, do I occur in the definiens)
-  (True, True)  -- it's me and the occur check failed; oh noes!
-    -> op Barf
-  (True, False)  -- it's me, so extrude my dependencies and substitute me!
-    -> foldr (guessing . K) (k (Now :< (t :/: x)) (K ())) ds
-  (False, True)  -- it's not me, but I occur, so extrude me!
-    -> Call (Make (e : ds) (Ty t) x) k
-  (False, False)  -- it's nothing to do with me, so leave alone!
-    -> Call c $ \ u r -> guessing (K e) (k u r)
--- nobody made me; I could be anything; pawn becomes queen!
-guessing e (RetNow s) = RetNow (gen (unK e) s)
--- forward the rest (the update is a no-op)
-guessing e (Call c k) = Call c $ \ u r -> guessing (e &> u) (k u r)
-
 -- handle Inst requests
 --   (this is fatsemi in Gundry-McBride-McKinna
 --   , doorstop in Krishnaswami-Dunfield)
@@ -326,6 +320,25 @@ bloc (Call (Inst (Sch (P s))) k) =
 bloc (RetNow (Ty t)) = RetNow (Sch (T t))
 -- otherwise forward
 bloc (Call c k) = Call c $ \ u r -> bloc (k u r)
+
+-- handle Make, but also do generalisation (note we're computing type schemes)
+guessing :: K (String, Int) i -> TiMo W Schime i -> TiMo W Schime i
+-- when Make shows up, we have four possibilities
+guessing (K e) (Call c@(Make ds (Ty t) x) k) = case (e == x, dep e t) of
+  -- (is it me?, do I occur in the definiens)
+  (True, True)  -- it's me and the occur check failed; oh noes!
+    -> op Barf
+  (True, False)  -- it's me, so extrude my dependencies and substitute me!
+    -> foldr (guessing . K) (k (Now :< (t :/: x)) (K ())) ds
+  (False, True)  -- it's not me, but I occur, so extrude me!
+    -> Call (Make (e : ds) (Ty t) x) k
+  (False, False)  -- it's nothing to do with me, so leave alone!
+    -> Call c $ \ u r -> guessing (K e) (k u r)
+-- nobody made me; I could be anything; pawn becomes queen!
+guessing e (RetNow s) = RetNow (gen (unK e) s)
+-- forward the rest (the update is a no-op)
+guessing e (Call c k) = Call c $ \ u r -> guessing (e &> u) (k u r)
+
 
 
 ------------------------------------------------------------------------------
@@ -378,10 +391,7 @@ unify :: Tyme i -> Tyme i -> TiMo W (K ()) i
 -- (note that catches trivial occur check failures, leaving only bad ones)
 unify a b | a == b = retNow (K ())
 -- rigid-rigid decomposition
-unify (Ty (s0 :-> t0)) (Ty (s1 :-> t1)) =
-  -- make the patvars Kripke
-  kripkefy (Ty s0) $ \ s0 -> kripkefy (Ty t0) $ \ t0 ->
-  kripkefy (Ty s1) $ \ s1 -> kripkefy (Ty t1) $ \ t1 ->
+unify (s0 :-&> t0) (s1 :-&> t1) =
   -- solve the subproblems
   unify s0 s1 >>>= \ _ ->
   unify t0 t1
@@ -398,7 +408,7 @@ infer (V x) =
 infer (x :=> b) =
   guess >>>= \ s ->                      -- guess the domain
   decl x (tiT s) (infer b) >>>= \ t ->   -- declare x monomorphically
-  retNow (tiArr s t)                     -- assemble the function type
+  retNow (s -&> t)                       -- assemble the function type
 infer (f :$ a) =
   infer f >>>= \ ft ->        -- infer the function's type
   infer a >>>= \ at ->        -- infer the argument's type
