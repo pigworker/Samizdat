@@ -1,70 +1,47 @@
+{-----------------------------------------------------------------------------
+An Effects-and-Handlers Implementation of Hindley-Milner Typechecking
+
+Points of interest include
+
+1. I use a free monad indexed over "Time" to represent computations which
+   take time, during which progress can occur. Progress is packaged as the
+   morphisms of the Time category, and is propagated rather quietly.
+2. Instead of representing the typing context explicitly as a data structure,
+   all contextualisation is done by effect handlers, responding to the effects
+   enabled by the monad.
+
+-----------------------------------------------------------------------------}
+
+
 {-# LANGUAGE DataKinds, GADTs, KindSignatures, RankNTypes, StandaloneDeriving,
     QuantifiedConstraints, LambdaCase, ScopedTypeVariables, TypeOperators,
     TypeFamilies, UndecidableInstances, ConstraintKinds, TupleSections,
     IncoherentInstances, OverlappingInstances, PatternSynonyms,
-    ViewPatterns, TypeOperators #-}
+    ViewPatterns, TypeOperators, LiberalTypeSynonyms #-}
 
 module EffW where
 
 import Data.Kind      -- it's going to be this sort of adventure
 import Unsafe.Coerce  -- and this sort
 
-
-------------------------------------------------------------------------------
--- de Bruijn Indices
-------------------------------------------------------------------------------
-
--- natural numbers, for how many things are in scope
-data N = Z | S N
-
--- de Bruijn indices, for which things are in scope
-data Inx (n :: N) :: Type where
-  Zi :: Inx (S n)
-  Si :: Inx n -> Inx (S n)
-deriving instance Show (Inx n)
-deriving instance Eq (Inx n)
-
--------
--- if you know an Inx n, n isn't Z
-data Pos (n :: N) :: Type where
-  Pos :: Pos (S n)
-
-inxPos :: Inx n -> Pos n
-inxPos Zi = Pos
-inxPos (Si _) = Pos
--------
-
--- thin j i is never j
-thin :: Inx (S n) -> Inx n -> Inx (S n)
-thin  Zi        i  = Si i
-thin (Si j)  Zi    = Zi
-thin (Si j) (Si i) = Si (thin j i)
-
--- thick j j = Nothing; thick j (thin j i) = i
-thick :: Inx (S n) -> Inx (S n) -> Maybe (Inx n)
-thick  Zi     Zi    = Nothing
-thick  Zi    (Si j) = pure j
-thick (Si j)  Zi    = case inxPos j of Pos -> pure Zi
-thick (Si j) (Si i) = case inxPos j of Pos -> Si <$> thick i j
-
-
 ------------------------------------------------------------------------------
 -- Indexing
 ------------------------------------------------------------------------------
 
-type (-:>) s t = forall i. s i -> t i   -- grumble want type lambda
+-- index-respecting functions
+
+type (-:>) s t i = s i -> t i
+type All f = forall i. f i
+infixr 3 -:>
+
 
 data (:*) (s :: a -> Type)(t :: a -> Type)(i :: a) where
   (:*) :: s i -> t i -> (s :* t) i
+infixr 4 :*
 
-data K (t :: Type)(i :: a) :: Type where
-  K :: t -> K t i
-  deriving Eq
+newtype K (t :: Type)(i :: a) = K {unK :: t} deriving Eq
 
-unK :: K t i -> t
-unK (K t) = t
-
-kmap :: (s -> t) -> K s -:> K t
+kmap :: (s -> t) -> All (K s -:> K t)
 kmap f (K s) = K (f s)
 
 data Some (f :: a -> Type) :: Type where
@@ -120,15 +97,15 @@ instance (LE s (SegFrom t), SegTo t) => LE s t where
 
 type Kripke v t = forall u. LE t u => v u
 
-kripke :: Timed v => v t -> Kripke v t
+kripke :: Timed v => All (v -:> Kripke v)
 kripke v = v &> lesson
 
-kripkefy :: Timed v => v s -> (Kripke v s -> f s) -> f s
+kripkefy :: Timed v => All (v -:> (Kripke v -:> f) -:> f)
 kripkefy v k = k (kripke v)
 
 
 class MoTime (m :: (Time -> Type) -> (Time -> Type)) where
-  retNow :: Timed v => v s -> m v s
+  retNow :: Timed v => All (v -:> m v)
   (>>>=)  :: (Timed f, Timed g)
          => m f s
          -> (forall t. (SegTo t, SegFrom t ~ s) =>
@@ -140,9 +117,52 @@ class MoTime (m :: (Time -> Type) -> (Time -> Type)) where
          -> m g s
   mf >>> mg = mf >>>= \ _ -> mg
 
-split :: (Timed s, Timed t) => (s :* t) i -> (Kripke s i -> Kripke t i -> f i) -> f i
+split
+  :: (Timed s, Timed t)
+  => All ((s :* t) -:> (Kripke s -:> Kripke t -:> f) -:> f)
 split (s :* t) f = f (kripke s) (kripke t)
 
+
+------------------------------------------------------------------------------
+-- de Bruijn Indices
+------------------------------------------------------------------------------
+
+-- natural numbers, for how many things are in scope
+data N = Z | S N
+
+-- de Bruijn indices, for which things are in scope
+data Inx (n :: N) :: Type where
+  Zi :: Inx (S n)
+  Si :: Inx n -> Inx (S n)
+deriving instance Eq (Inx n)
+instance Show (Inx n) where
+  show = show . go where
+    go :: forall n. Inx n -> Int
+    go Zi     = 0
+    go (Si i) = 1  + go i
+
+-------
+-- if you know an Inx n, n isn't Z
+data Pos (n :: N) :: Type where
+  Pos :: Pos (S n)
+
+inxPos :: Inx n -> Pos n
+inxPos Zi = Pos
+inxPos (Si _) = Pos
+-------
+
+-- thin j i is never j
+thin :: Inx (S n) -> Inx n -> Inx (S n)
+thin  Zi        i  = Si i
+thin (Si j)  Zi    = Zi
+thin (Si j) (Si i) = Si (thin j i)
+
+-- thick j j = Nothing; thick j (thin j i) = i
+thick :: Inx (S n) -> Inx (S n) -> Maybe (Inx n)
+thick  Zi     Zi    = Nothing
+thick  Zi    (Si j) = pure j
+thick (Si j)  Zi    = case inxPos j of Pos -> pure Zi
+thick (Si j) (Si i) = case inxPos j of Pos -> Si <$> thick i j
 
 
 ------------------------------------------------------------------------------
@@ -168,7 +188,7 @@ closed = unsafeCoerce
 
 newtype Tyme (t :: Time) = Ty (Ty Z) deriving (Show, Eq)
 
-tiE :: K ExVar t -> Tyme t
+tiE :: All (K ExVar -:> Tyme)
 tiE (K e) = Ty (E e)
 
 data UnArrEh (i :: Time) where
@@ -183,7 +203,7 @@ unArrEh _ = UnArrNaw
 pattern (:-&>) :: Kripke Tyme i -> Kripke Tyme i -> Tyme i
 pattern s :-&> t <- (unArrEh -> UnArrAye s t)
 
-(-&>) :: Tyme t -> Tyme t -> Tyme t
+(-&>) :: All (Tyme -:> Tyme -:> Tyme)
 Ty a -&> Ty b = Ty (a :-> b)
 
 instance Timed Tyme where
@@ -202,7 +222,7 @@ data Sch (n :: N)
 
 newtype Schime (t :: Time) = Sch (Sch Z) deriving Show
 
-monotype :: Tyme -:> Schime
+monotype :: All (Tyme -:> Schime)
 monotype (Ty t) = Sch (T t)
 
 dep :: ExVar -> Ty n -> Bool
@@ -212,11 +232,11 @@ dep _ _ = False
 
 instance Timed Schime where
   step (Sch s) (r :/: x) = Sch (go s) where
-    go :: Sch -:> Sch
+    go :: All (Sch -:> Sch)
     go (T t) = T (subst r x t)
     go (P s) = P (go s)
     
-stan :: Sch (S Z) -> Tyme -:> Schime
+stan :: Sch (S Z) -> All (Tyme -:> Schime)
 stan s (Ty r) = Sch (sub Zi s) where
   sub :: Inx (S n) -> Sch (S n) -> Sch n
   sub j (T t) = T (go t) where
@@ -227,8 +247,8 @@ stan s (Ty r) = Sch (sub Zi s) where
     go (E e) = E e
   sub j (P p) = P (sub (Si j) p)
 
-gen :: ExVar -> Schime i -> Schime i
-gen e (Sch s) = case go Zi s of (s', b) -> if b then Sch (P s') else Sch s
+gen :: All (K ExVar -:> Schime -:> Schime)
+gen (K e) (Sch s) = case go Zi s of (s', b) -> if b then Sch (P s') else Sch s
  where
 
   go :: Inx (S n) -> Sch n -> (Sch (S n), Bool)
@@ -254,14 +274,14 @@ data TiMo
   RetNow :: v s -> TiMo c v s
   Call :: forall c r v s
         . c r s
-       -> (((&>) s :* r) -:> TiMo c v)
+       -> All ((&>) s -:> r -:> TiMo c v)
        -> TiMo c v s
 
 instance (forall r. Timed (c r), Timed v) => Timed (TiMo c v) where
   RetNow v &> u = RetNow (v &> u)
-  Call c k &> u = Call (c &> u) $ \ (w :* r) -> k ((u &> w) :* r)
+  Call c k &> u = Call (c &> u) $ \ w r -> k (u &> w) r
   step (RetNow v) u = RetNow (step v u)
-  step (Call c k) u = Call (step c u) $ \ (w :* r) -> k ((Now :< u) &> w :* r)
+  step (Call c k) u = Call (step c u) $ \ w r -> k ((Now :< u) &> w) r
 
 instance MoTime (TiMo c) where
   retNow = RetNow
@@ -271,15 +291,15 @@ instance MoTime (TiMo c) where
              Kripke f t -> TiMo c g t)
          -> TiMo c g s
   RetNow v >>>= k = leap (now v) (k (kripke v))
-  Call c j >>>= k = Call c $ \ (u :* r) ->
-    j (u :* r) >>>= jump u seg
+  Call c j >>>= k = Call c $ \ u r ->
+    j u r >>>= jump u seg
     where
       jump :: forall t t'. s &> t -> t &> t'
            -> Kripke f t' -> TiMo c g t'
       jump u w f = leap (u &> w) (k f)
 
 op :: Timed r => c r s -> TiMo c r s
-op c = Call c $ \ (u :* r) -> RetNow r
+op c = Call c $ \ _ r -> RetNow r
 
 leap :: forall s t x
       . s &> t
@@ -342,12 +362,12 @@ instance Timed (W r) where
 ------------------------------------------------------------------------------
 
 -- handle Next...
-nonce :: Timed v => Int -> TiMo W v i -> TiMo W v i
+nonce :: Timed v => Int -> All (TiMo W v -:> TiMo W v)
 -- ...by giving the next number and rehandling the continuation with increment
-nonce n (Call Next k) = nonce (n + 1) (k (Now :* K n))
+nonce n (Call Next k) = nonce (n + 1) $ k Now (K n)
 -- forward everything else
 nonce n (RetNow v) = RetNow v
-nonce n (Call c k) = Call c $ nonce n . k
+nonce n (Call c k) = Call c $ \ u r -> nonce n $ k u r
 
 -- pick a fresh existential variable using Next
 fresh :: String -> TiMo W (K ExVar) i
@@ -355,52 +375,51 @@ fresh x =
   op Next >>>= \ i ->
   retNow (kmap (x,) i)
 
-
 type ProgVar = String
 -- handle VSch...
-decl :: Timed v => ProgVar -> Schime i -> TiMo W v i -> TiMo W v i
+decl :: Timed v => ProgVar -> All (Schime -:> TiMo W v -:> TiMo W v)
 -- ...by giving the scheme if we're looking up this decl
-decl x s (Call (VSch y) k) | x == y = decl x s $ k (Now :* s)
+decl x s (Call (VSch y) k) | x == y = decl x s $ k Now s
 -- forward everything else, but...
 decl x s (RetNow v) = RetNow v
 -- ...be sure to update the scheme in the light of progress
-decl x s (Call c k) = Call c $ \ (u :* r) -> decl x (s &> u) $ k (u :* r)
+decl x s (Call c k) = Call c $ \ u r -> decl x (s &> u) $ k u r
 
 -- handle Inst requests
 --   (this is fatsemi in Gundry-McBride-McKinna
 --   , doorstop in Krishnaswami-Dunfield)
-bloc :: TiMo W Tyme i -> TiMo W Schime i
+bloc :: All (TiMo W Tyme -:> TiMo W Schime)
 -- if we're instantiating a monotype, we're done
-bloc (Call (Inst (Sch (T t))) k) = bloc $ k (Now :* Ty t)
+bloc (Call (Inst (Sch (T t))) k) = bloc $ k Now (Ty t)
 -- if we're instantiating a polytime, we're inventing a fresh existential var
 -- and guessing it
 bloc (Call (Inst (Sch (P s))) k) =
-  fresh "x" >>>= \ e -> 
+  fresh "x" >>>= \ e ->
   guessing e $ bloc $
     op (Inst (stan s (tiE e))) >>>= \ t ->
-    k (lesson :* t)
+    k lesson t
 -- retNow wraps the type
 bloc (RetNow (Ty t)) = RetNow (Sch (T t))
 -- otherwise forward
-bloc (Call c k) = Call c $ \ ur -> bloc $ k ur
+bloc (Call c k) = Call c $ \ u r -> bloc $ k u r
 
 -- handle Make, but also do generalisation (note we're computing type schemes)
-guessing :: K ExVar i -> TiMo W Schime i -> TiMo W Schime i
+guessing :: All (K ExVar -:> TiMo W Schime -:> TiMo W Schime)
 -- when Make shows up, we have four possibilities
 guessing (K e) (Call c@(Make ds (Ty t) x) k) = case (e == x, dep e t) of
   -- (is it me?, do I occur in the definiens)
   (True, True)  -- it's me and the occur check failed; oh noes!
     -> op Barf
   (True, False)  -- it's me, so extrude my dependencies and substitute me!
-    -> foldr (guessing . K) (k (Now :< (t :/: x) :* K ())) ds
+    -> foldr (guessing . K) (k (Now :< (t :/: x)) (K ())) ds
   (False, True)  -- it's not me, but I occur, so extrude me!
     -> Call (Make (e : ds) (Ty t) x) k
   (False, False)  -- it's nothing to do with me, so leave alone!
-    -> Call c $ \ ur -> guessing (K e) $ k ur
+    -> Call c $ \ u r -> guessing (K e) $ k u r
 -- nobody made me; I could be anything; pawn becomes queen!
-guessing e (RetNow s) = RetNow (gen (unK e) s)
+guessing e (RetNow s) = RetNow (gen e s)
 -- forward the rest (the update is a no-op)
-guessing e (Call c k) = Call c $ \ (u :* r) -> guessing (e &> u) $ k (u :* r)
+guessing (K e) (Call c k) = Call c $ \ u r -> guessing (K e) $ k u r
 
 
 ------------------------------------------------------------------------------
@@ -428,7 +447,7 @@ infixr 4 :=>
 infixl 5 :$
 
 -- ensure that a type is a function type, giving back source and target
-funTy :: Tyme i -> TiMo W (Tyme :* Tyme) i
+funTy :: All (Tyme -:> TiMo W (Tyme :* Tyme))
 -- if it's already a function type, crack on!
 funTy (Ty (s :-> t)) = retNow (Ty s :* Ty t)
 -- otherwise, invent a function type and constrain
@@ -438,11 +457,11 @@ funTy u =
   funTy f
 
 -- guess a type
-guess :: TiMo W Tyme i
+guess :: All (TiMo W Tyme)
 guess = op (Inst (Sch (P (T (U Zi)))))
 
 -- make types the same!
-unify :: Tyme i -> Tyme i -> TiMo W (K ()) i
+unify :: All (Tyme -:> Tyme -:> TiMo W (K ()))
 -- if they're already the same, we're done
 -- (note that catches trivial occur check failures, leaving only bad ones)
 unify a b | a == b = retNow (K ())
@@ -454,7 +473,7 @@ unify t (Ty (E e)) = op (Make [] t e)
 -- anything else is hopeless
 unify _ _ = op Barf
 
-infer :: Tm -> TiMo W Tyme i
+infer :: Tm -> All (TiMo W Tyme)
 infer (V x) =
   op (VSch x) >>>= \ s ->   -- look up the declaration
   op (Inst s)              -- instantiate it
