@@ -1,5 +1,10 @@
 module Pigeons where
 
+
+------------------------------------------------------------------------------
+-- TOTALLY STANDARD PRELIMINARIES
+------------------------------------------------------------------------------
+
 data _~_ {X : Set}(x : X) : X -> Set where
   r~ : x ~ x
 
@@ -8,6 +13,21 @@ data Zero : Set where
 data Nat : Set where
   su : Nat -> Nat
   ze : Nat
+
+record _><_ (S : Set)(T : S -> Set) : Set where
+  constructor _,_
+  field
+    fst : S
+    snd : T fst
+open _><_ public
+_*_ : Set -> Set -> Set
+S * T = S >< \ _ -> T
+infixr 20 _*_ _,_
+
+
+------------------------------------------------------------------------------
+-- IDIOSYNCRATIC PRELIMINARIES re THINNINGS
+------------------------------------------------------------------------------
 
 data _c=_ : Nat -> Nat -> Set where
   no : forall {n m} -> n c= m ->    n c= su m
@@ -18,6 +38,7 @@ none : forall {n} -> ze c= n
 none {su n} = no none
 none {ze} = ze
 
+-- relational diagrammatic composition
 data [_-<_]~_ : forall {l n m}
     ->  l c= n  ->  n c= m  ->  l c= m  -> Set where
   no : forall {l n m}{th : l c= n}{ph : n c= m}{ps : l c= m}
@@ -31,16 +52,27 @@ data [_-<_]~_ : forall {l n m}
     -> [ su th -< su ph ]~ su ps
   ze : [ ze    -< ze    ]~ ze
 
-record _><_ (S : Set)(T : S -> Set) : Set where
-  constructor _,_
-  field
-    fst : S
-    snd : T fst
-open _><_ public
-_*_ : Set -> Set -> Set
-S * T = S >< \ _ -> T
-infixr 20 _*_ _,_
+nonethnone : forall {i j}{th : i c= j} -> [ none -< th ]~ none
+nonethnone {th = no th} = no nonethnone
+nonethnone {th = su th} = nosu nonethnone
+nonethnone {th = ze}    = ze
 
+-- candidate pullback
+record Common {i j n} h (th : i c= n)(ph : j c= n) : Set where
+  constructor common
+  field
+    {leftInc}   : h c= i
+    {midInc}    : h c= n
+    {rightInc}  : h c= j
+    leftTri     : [ leftInc  -< th ]~ midInc
+    rightTri    : [ rightInc -< ph ]~ midInc
+
+
+------------------------------------------------------------------------------
+-- IDIOSYNCRATIC PRELIMINARIES re ADDITION
+------------------------------------------------------------------------------
+
+-- relational addition
 data [_+_]~_ : Nat -> Nat -> Nat -> Set where
   su : forall {l n m}
     -> [    l + n ]~    m
@@ -58,19 +90,10 @@ rightSu : forall {l n m}
 rightSu (su c) with _ , r~ , u <- rightSu c = _ , r~ , su u
 rightSu (ze .(su _)) = _ , r~ , ze _
 
-nonethnone : forall {i j}{th : i c= j} -> [ none -< th ]~ none
-nonethnone {th = no th} = no nonethnone
-nonethnone {th = su th} = nosu nonethnone
-nonethnone {th = ze}    = ze
 
-record Common {i j n} h (th : i c= n)(ph : j c= n) : Set where
-  constructor common
-  field
-    {leftInc}   : h c= i
-    {midInc}    : h c= n
-    {rightInc}  : h c= j
-    leftTri     : [ leftInc  -< th ]~ midInc
-    rightTri    : [ rightInc -< ph ]~ midInc
+------------------------------------------------------------------------------
+-- THE PIGEONHOLE PRINCIPLE
+------------------------------------------------------------------------------
 
 pigeons : forall {i j n k m}
        -> (th : i c= n)

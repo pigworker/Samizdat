@@ -384,6 +384,7 @@ decl x s (Call (VSch y) k) | x == y = decl x s $ k Now s
 decl x s (RetNow v) = RetNow v
 -- ...be sure to update the scheme in the light of progress
 decl x s (Call c k) = Call c $ \ u r -> decl x (s &> u) $ k u r
+  
 
 -- handle Inst requests
 --   (this is fatsemi in Gundry-McBride-McKinna
@@ -451,9 +452,9 @@ funTy :: All (Tyme -:> TiMo W (Tyme :* Tyme))
 -- if it's already a function type, crack on!
 funTy (Ty (s :-> t)) = retNow (Ty s :* Ty t)
 -- otherwise, invent a function type and constrain
-funTy u =
+funTy u = kripkefy u $ \ u ->
   op (Inst (Sch (P (P (T (U (Si Zi) :-> U Zi)))))) >>>= \ f ->
-  unify (kripke u) f >>>= \ _ ->
+  unify u f >>>= \ _ ->
   funTy f
 
 -- guess a type
