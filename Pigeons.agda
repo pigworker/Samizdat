@@ -100,19 +100,17 @@ pigeons : forall {i j n k m}
        -> (ph : j c= n)
        -> [    i + j ]~ m
        -> [ su n + k ]~ m
-       -> _ >< \ h
-       -> Common h th ph
-        * (su ze c= h)
+       -> Common (su ze) th ph
 pigeons (no th) (no ph) ij (su (su nk))
-  with _ , common u v , x <- pigeons th ph ij (su (su' nk))
-     = _ , common (no u) (no v) , x
+  with common u v <- pigeons th ph ij (su (su' nk))
+     = common (no u) (no v)
 pigeons (no th) (su ph) ij (su nk)
   with _ , r~ , d <- rightSu ij
-  with _ , common u v , x <- pigeons th ph d nk
-     = _ , common (no u) (nosu v) , x
+  with common u v <- pigeons th ph d nk
+     = common (no u) (nosu v)
 pigeons (su th) (no ph) (su ij) (su nk)
-  with _ , common u v , x <- pigeons th ph ij nk
-     = _ , common (nosu u) (no v) , x
+  with common u v <- pigeons th ph ij nk
+     = common (nosu u) (no v)
 pigeons (su th) (su ph) ij nk
-     = _ , common (su nonethnone) (su nonethnone) , su none
+     = common (su nonethnone) (su nonethnone)
 pigeons ze ze (ze .ze) ()
