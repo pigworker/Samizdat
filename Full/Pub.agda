@@ -120,3 +120,12 @@ universally (pubNa y u) {`N} g' f' q
   = (go \ n -> fst (u (fo g' n) (fo f' n) (q n)))
   , (\ n -> fst (snd (u (fo g' n) (fo f' n) (q n))))
   , (\ n -> snd (snd (u (fo g' n) (fo f' n) (q n))))
+
+pubMo : forall {S P Q R T}
+  {g* : S >> P}{f : P >> R}{f* : S >> Q}{g : Q >> R}
+  -> Pub[ g* > f ]~[ f* > g ]
+  -> (h : R >> T)
+  -> Inj h
+  -> Pub[ g* > (f ->- h) ]~[ f* > (g ->- h) ]
+pubMo p h i = pubCo (pubFlip (pubCo (pubFlip p) (pubId _)))
+                    (pubFlip (pubCo (pubFlip (pubId _)) (pubInj i)))

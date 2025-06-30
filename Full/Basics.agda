@@ -88,3 +88,13 @@ bu- n = su- du- n
 fu-_ : Nat -> Nat
 fu- ze = ze
 fu- su- n = bu- fu- n
+
+data EvOd : Nat -> Set where
+  isDu : (h : Nat) -> EvOd (du- h)
+  isBu : (h : Nat) -> EvOd (bu- h)
+
+evOd : (n : Nat) -> EvOd n
+evOd ze = isDu ze
+evOd (su- n) with evOd n
+... | isDu h = isBu h
+... | isBu h = isDu (su- h)
