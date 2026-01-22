@@ -24,6 +24,10 @@ module EffW where
 import Data.Kind      -- it's going to be this sort of adventure
 import Unsafe.Coerce  -- and this sort
 
+
+
+
+
 ------------------------------------------------------------------------------
 -- Indexing
 ------------------------------------------------------------------------------
