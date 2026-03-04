@@ -1,0 +1,249 @@
+\documentclass{book}
+\usepackage{palatino}
+\usepackage{amssymb}
+\usepackage{stmaryrd}
+\usepackage{pig}
+\usepackage{upgreek}
+\ColourEpigram
+
+\newcommand{\D}[1]{\blue{\ensuremath{\mathsf{#1}}}}
+\newcommand{\C}[1]{\red{\ensuremath{\mathsf{#1}}}}
+\newcommand{\F}[1]{\green{\ensuremath{\mathrm{#1}}}}
+\newcommand{\N}[1]{\black{\ensuremath{#1}}}
+
+\begin{document}
+\title{fevered scribblings\\ from an unkempt mind}
+\author{conor mc bride}
+\maketitle
+
+\tableofcontents
+\newpage
+
+\chapter{depending on the traffic}
+
+Many of my stories begin with ``Once upon an unguarded moment, I said to Sam Lindley\ldots'' and this is one of them. What I said was ``If you're not doing session types with dependent types, you've got to be doing them wrong.''. What I meant was that earlier signals \emph{in} a protocol can determine the later stucture \emph{of} the protocol, and that sounds pretty fucking dependently typed to me. Sam took a certain mischievous pleasure in relaying my offhand remark to Phil Wadler, and the next thing I knew, Phil was in my office with Simon Gay, saying ``Let's do dependent session types!''.
+
+Our starting point was the CP system in Phil's ``Propositions as Sessions'', the rules of which we inscribed on my whiteboard, before switching to a different colour of pen and trying to bolt on type dependency. This did not work, but we had a very enjoyable lunch of spicy food and spicier nerdsniping. ``Linear types are session types'' went the reasoning ``so dependent session types must be dependent linear types.'', raising the question ``So what are dependent linear types?'' which was, back then, a well known hard problem that I became interested in, leading to my own ``I Got Plenty O' Nuttin'{}'' as published in Phil's Festschrift, (and repaired by Bob Atkey to make Quantitative Type Theory). But by that stage, I'd figured out that dependent linear types were \emph{not} what dependent session types should be.
+
+To see why not, let me tell an earlier story, this time from a summer school at Heriot-Watt University. Phil was lecturing on ``Propositions as Sessions'', and James McKinna, sitting on my left, asked the irritatingly perceptive question  ``What is it that session types classify, and what is the theorem that holds by virtue of that classification?''. That's actually a rather difficult question, and Phil was a little flummoxed by it, with just cause. Read Simon Gay's lovely paper, ``Subtyping Supports Safe Session Substitution'', also in Phil's Festschrift: Simon observes that the session subtyping literature is divided into two perfectly dual camps, who write down perfectly opposite rules, because one camp thinks session types classify \emph{channels} while the other thinks session types classify the \emph{processes} interacting on channels. Of course, they do both.
+
+James's question, phrased more directly, might as well have been ``What are you talking about?'', with an implicit expletive after the ``What'', and it is a question dependent types people should ask, because when those variables stand for earlier stuff in later types, you need to know what \emph{actual} stuff might end up substituting for those variables. Should dependent session types depend on channels? Should they depend on processes? Should they depend on something else?
+
+So let's play a game, you and me. We're processes. I don't know all of the rules, but it starts with me sending you a (natural) number, and the next move is you replying to me with a number. The rest of the game carries on from there. What's it like being me? I have to have a number, the number I send you. What's it like being you? You have to have a \emph{function} to compute your reply from my number. But you don't send me your function, just \emph{one} of its outputs. I can't go exploring what else you might have said if I'd chosen differently, so neither would it make sense of the protocol could. Your function is a secret from me, and from the rules of the game. What it does make sense for the protocol to depend on is the pair of numbers exchanged: we both know both of them, albeit for different reasons. That's to say that what it makes sense for dependent session types to depend on is the \emph{traffic} --- the history of the signals exchanged --- rather than the processes who exchange them or the channels by which they may do so. And it must be the case that that signals traffic is also something characterized by the session type.
+
+To remark, briefly, upon dependent linear types, it's a basic Curry-Howard-ist position that I should like to be able to prove linearly typed processes satisfy specifications, so it is just as vital that dependent linear types support dependency on processes, as it is that dependent session types do not. I think that observation shoves more than a cigarette paper between the two notions we mistakenly conflated, back in my office. I've thought quite hard about both of them, now that I've had the clarity to separate them. I've spent less ink on dependent session types. It's time I fixed that.
+
+
+\section{a universe of two-party protocols}
+
+\newcommand{\Signal}{\D{\mathbb{S}}}
+\newcommand{\signal}[1]{\green{\ensuremath{\llbracket \N{#1} \rrbracket_{\Signal}}}}
+\newcommand{\Protocol}{\D{\mathbb{P}}}
+\newcommand{\protocol}[1]{\green{\ensuremath{\llbracket \N{#1} \rrbracket_{\Protocol}}}}
+\newcommand{\SET}{\D{\mathsf{Set}}}
+\newcommand{\vd}{\C{\langle\rangle}}
+\newcommand{\send}[1]{\C{!}#1}
+\newcommand{\op}[1]{#1^{\C{\bot}}}
+\newcommand{\Sg}[2]{\C{\Upsigma}\:#1\:#2}
+
+Let's cook up a notion of `straight-line' protocol. I shall presume a universe of \emph{signal types}, by which I mean types of transmissible data.
+\[
+\Signal : \SET \qquad \signal{\cdot} : \Signal\to\SET
+\]
+If you chose $\Signal = 1$, $\signal\vd = 2$, I should not call you a fool, but we need not be so austere. A more interesting question is whether signals in this sense should have bounded bit width. Are the natural numbers a signal type? Of course they are! Numbers fit in 64 bits, don't they?
+
+So now our mission is to construct a universe of protocols built from signals
+\[
+\Protocol : \SET \qquad \protocol\cdot : \Protocol\to\SET
+\]
+where %$\protocol\cdot$
+tells you the protocol's type of signal traffic. Let's do this by Dybjer and Setzer's \emph{induction-recursion}, allowing us to talk about traffic while we're in the process of talking about protocols.
+
+We shall need primitive stuff and structure. What's the stuff?
+\[\begin{array}{ll@{\quad}l}
+\send{(S:\Signal)} : \Protocol & \protocol{\send{S}} = \signal{S} & \mbox{send a signal} \\
+\op{(P:\Protocol)} : \Protocol & \protocol{\op{P}} = \protocol{P} & \mbox{exchange sender and receiver}
+\end{array}\]
+That's to say that the most primitive protocol is to send a signal (it's the sending bang, not the linear logic bang), and its traffic is the signal sent. We can also construct the protocol to receive a signal with $\op{(\send{S})}$, with no change to the data the traffic consists of.
+
+Now, for structure, we shall need dependent sequential composition.
+\[\begin{array}{l@{\quad}l@{\quad}l}
+\C{1} : \Protocol & \protocol{\C{1}} = \D{1} & \mbox{skip} \\
+\Sg{(P:\Protocol)}{(Q:\protocol{P}\to\Protocol)} : \Protocol & \protocol{\Sg{P}{Q}} = (p:\protocol{P})\times\protocol{Q\:p} & \mbox{$P$ then $Q$}
+\end{array}\]
+And that's my point: in `$P$ then $Q$`, it makes sense to allow the subsequent $Q$ to depend on the traffic from $P$. The traffic for the whole the the dependent pair of the traffic for both. Traffic thus amounts to a dependent record type of the signals exchanged, without regard to who said what.
+
+So, we've said what it is to \emph{be} a protocol, but what is it to be a process which \emph{follows} a protocol? I have two answers to that question, and some learning occurred between one and the other, so let's have both.
+
+
+\section{a weakest-precondition semantics}
+
+\newcommand{\Play}[2]{\F{Protagonist}\:#1\:#2}
+\newcommand{\Oppo}[2]{\F{Antagonist}\:#1\:#2}
+\newcommand{\interact}[3]{\F{synthesis}\:#1\:#2\:#3}
+\newcommand{\pr}[2]{\red{\langle\N{#1},\N{#2}\rangle}}
+\newcommand{\lett}[3]{\mathrm{let}\;#1 = #2\;\mathrm{in}\; #3}
+\newcommand{\lam}[2]{\red{\uplambda} #1.\:#2}
+
+My first attempt to interpret protocols as types of processes gave a kind of proof-relevant weakest-precondition semantics, where each of the parties to protocol $P$ has some \emph{goal} $G:\protocol{P}\to\SET$ expressing what, to them, about the traffic in a $P$ interaction would make them $H$ for happy. We thus need to define (mutually) the parts in our drama
+\[\begin{array}{l}
+\Play{(P:\Protocol)}{(G:\protocol{P}\to\SET)} : \SET \\
+\Oppo{(P:\Protocol)}{(H:\protocol{P}\to\SET)} : \SET
+\end{array}\]
+to say what is the precondition for each to achieve their goals, $G$ and $H$ respectively, by interacting in accordance with $P$. And to come good on that, we shall need to show how the drama unfolds:
+\[
+\interact{(P:\Protocol)}{(g : \Play{P}{G})}{(h : \Oppo{P}{H})} :
+(p:\protocol{P})\times G\:p\times H\: p
+\]
+which is to say that the entire protocol runs, generating a complete record of its traffic, and both parties are satisfied with the outcome.
+
+For our `stuff', we have
+\[\begin{array}{l@{\qquad}r}
+\Play{\send{S}}{G} = (s:S)\times G\:S &
+\Oppo{\send{S}}{H} = (s:S)\to H\:S \\
+\multicolumn{2}{c}{
+  \interact{\send{S}}{\pr{s}{g}}{h} = \pr{s}{\pr{g}{h\:s}}
+  } \smallskip \\
+\Play{\op{P}}{G} = \Oppo{P}{G} &
+\Oppo{\op{P}}{H} = \Play{P}{H} \\
+\multicolumn{2}{c}{
+  \interact{\op{P}}{g}{h} =
+    \lett{\pr{p}{\pr{h'}{g'}}}{\interact{P}{h}{g}}{\pr{p}{\pr{g'}{h'}}}
+  } \smallskip \\
+\end{array}\]
+So, your functional structure from our little game shows up in the processes, as the receiver of a signal needs a strategy to be happy, whatever it is, while the sender must choose wisely on their own part. Meanwhile, for $\op{P}$, we literally exchange roles!
+
+Now, for structure, we have
+\[\begin{array}{l@{\qquad}r}
+\Play{\C{1}}{G} = G\:\vd &
+\Oppo{\C{1}}{H} = H\:\vd \\
+\multicolumn{2}{c}{
+  \interact{(\C{1})}{g}{h} = \pr{\vd}{\pr{g}{h}}
+  } \smallskip \\
+\multicolumn{2}{l}{\Play{(\Sg{P}{Q})}{G} = \Play{P}{\lam{p}{\Play{(Q\:p)}{\lam{q}{G\:\pr{p}{q}}}}}\qquad}\\
+\multicolumn{2}{r}{\Oppo{(\Sg{P}{Q})}{H} = \Oppo{P}{\lam{p}{\Oppo{(Q\:p)}{\lam{q}{H\:\pr{p}{q}}}}}}\\
+\multicolumn{2}{c}{
+  \interact{(\Sg{P}{Q})}{g}{h} =
+  \begin{array}[t]{l}
+  \lett{\pr{p}{\pr{g'}{h'}}}
+       {\interact{P}{g}{h}}
+       {\\ \lett{\pr{q}{\pr{g''}{h''}}}
+         {\interact{(Q\:p)}{g'}{h'}}
+         {\\ \pr{\pr{p}{q}}{\pr{g''}{h''}}}
+       }
+       \end{array}
+  } \smallskip \\
+\end{array}\]
+So the trick is to make $P$'s postcondition for traffic $p$ exactly the computed precondition for $Q\:p$. When we play out $P$, we compute exactly the processes ready to play $Q$.
+
+I told this story at a Scottish Programming Languages Seminar: I remember it was at Heriot-Watt, but not exactly when. I even managed to give an example where one party sends the dimensions of a bitmap they would like to receive, then the other party sends a suitably sized matrix of bits. That's exactly the sort of thing that's hard to do in `classic' session types, where whenever a bit is transmitted, the protocol must fork \emph{immediately} on that bit, or \emph{not at all}. It's progress to loosen the timing for allowing the protocol to vary with the traffic.
+
+But I don't like this semantics, because it's not compositional enough. Whilst protocols $P:\Protocol$ allow arbitrary left- and right-nesting of subprotocols, our $\Play{P}{G}$ and $\Oppo{P}{H}$ flatten that structure tail-recursively into a right-nested sequence of quantifiers. I don't mind compilers writing programs in continuation passing style, but I'm damned if I'll do it myself.
+
+
+\section{control, response, traffic}
+
+\newcommand{\FAM}{\F{Fam}}
+\newcommand{\Party}[1]{\F{Party}\:#1}
+
+Over the years, I've learned a lot from Peter (Hank) Hancock, particularly about using dependent types to characterize interaction. ``What would Hank do?'' I asked myself. Hank has a particular idiolect, which I may yet teach you, but I certainly don't expect to come as standard. The Hank in my head says that a \emph{party} to protocol $P:\Protocol$ is something in
+\[
+\FAM^2\:\protocol{P}
+\]
+where
+\[
+\FAM\:X = (I:\SET)\times (I\to X)
+\]
+which is the \emph{fibrational} way to talk constructively about subsets of $X$, by picking them out as the image of a function from some domain $I$. The `squaring' in this instance indicates iterated composition (not the trigonometric usage, at all), so we get
+\[
+\Party{P} =
+(\mathit{Control}:\SET)\times \mathit{Control}\to (\mathit{Response}:\SET)\times \mathit{Response}\to \protocol{P}
+\]
+That is, to be a party to a protocol $P$ is to have a set $\mathit{Control}$ of the choices you control --- what's in your mind? --- but then such a choice will determine a set $\mathit{Response}$ of the possible reactions from your antagonist --- what's out loud? --- over which you have no control. These are quite different sort of things. We expect $\mathit{Control}$ to be a higher-order type of internal cogitations to decide what to say, while $\mathit{Response}$ will be a first-order type of signal utterances you might hear out loud. What's in your antagonist's $\mathit{Control}$ should remain a secret. But between the two, how you decided what to say and what you heard, \emph{your perception} of the traffic should be determined.
+
+I gave a talk about this in a small seminar room at the University of Glasgow where I drew two enormous Easter Island heads on the whiteboard, with thought bubbles and speech bubbles to distinguish what was a cognitive process and what was an utterance. A year later, the heads were still on the board!
+
+Now, let us define
+\renewcommand{\Play}[1]{\F{Protagonist}\:#1}
+\renewcommand{\Oppo}[1]{\F{Antagonist}\:#1}
+\newcommand{\Eith}[1]{\F{-tagonist}\:#1}
+\[\Play{(P:\Protocol)}:\Party{P}\qquad \Oppo{(P:\Protocol)}:\Party{P}
+\]
+Of coursse, we shall have to say how to make them interact, but let me leave that to one side, for now.
+
+We shall, of course have exchange of roles
+\[
+\Play{\op{P}} = \Oppo{P} \qquad
+\Oppo{\op{P}} = \Play{P}
+\]
+
+Central is what happens with signals.
+\[
+\Play{\send{S}} = \pr{S}{\lam{s}{\pr{\D{1}}{\lam{\_}{s}}}} \qquad
+\Oppo{\send{S}} = \pr{\D{1}}{\lam{\_}{\pr{S}{\lam{s}{s}}}}
+\]
+The protagonist controls the signal; the antagonist controls nothing!
+The protagonist expects a trivial acknowledgement; the antagonist expects the signal!
+Each of them can figure out the traffic: the protagonist chose it and the antagonist heard it.
+
+Stopping is easy:
+\[
+\Eith{\C{1}} = \pr{\D{1}}{\lam{\_}{\pr{\D{1}}{\lam{\_}{\vd}}}}
+\]
+
+Sequential composition is a more intricate tango. Let me say what it is, then talk you through it.
+\[\begin{array}{@{}l}
+\Eith{(\Sg{P}{Q})} = \\ \qquad\begin{array}[t]{@{}l}
+  \lett{\pr{\mathit{CP}}{\lam{c}{\pr{\mathit{RP}\:c}{\lam{r}{\mathit{tP}\:c\:r}}}}}
+       {\Eith{P}}
+  {\\ \lett{\lam{t}\pr{\mathit{CQ}\:t}{\lam{c}{\pr{\mathit{RQ}\:t\:c}{\lam{r}{\mathit{tQ}\:t\:c\:r}}}}}
+       {\lam{t}{\Eith{(Q\:t)}}}
+       {\\
+         \begin{array}[t]{@{}rl}
+           \red{\langle} & (\mathit{cp}:\mathit{CP})\times
+           (\mathit{rp}:\mathit{RP}\:\mathit{rp})\to
+           \mathit{CQ}\:(\mathit{tP}\:\mathit{cp}\:\mathit{rp})\\
+           \red{,} &
+           \begin{array}[t]{@{}l}
+             \lam{\pr{\mathit{cp}}{\mathit{fq}}}
+                 {\\
+                   \begin{array}[t]{@{}rl}
+                     \red{\langle} & (\mathit{rp}:\mathit{RP}\:\mathit{cp})\times
+                     \mathit{RQ}\:(\mathit{tP}\:\mathit{cp}\:\mathit{rp})\:
+                        (\mathit{fq}\:\mathit{rp})\\
+                     \red{,} & \lam{\pr{\mathit{rp}}{\mathit{rq}}}{\\
+                       & \pr{\mathit{tP}\:\mathit{cp}\:\mathit{rp}}
+                       {\mathit{tQ}\:(\mathit{tP}\:\mathit{cp}\:\mathit{rp})
+                         \:(\mathit{fq}\:\mathit{rp})\:\mathit{rq}}} \\
+                     \red{\rangle}
+                     \end{array}
+                 }
+           \end{array}
+           \\
+           \red{\rangle} 
+\end{array}  }}
+\end{array}
+\end{array}\]
+
+So, before you say ``Get out of my face!'', let me tell an interleaved story that is very hard to write as a program, even if you build intuitionistic choice into your pattern matching notation (please do this!). For $\Sg{P}{Q}$
+\begin{enumerate}
+\item the Control begins by choosing the control, $\mathit{cp}$, for $P$
+\item the Response begins by asking for a $P$-response, $\mathit{rp}$, to $\mathit{cp}$
+\item we may now figure out the $P$-traffic, $t$ --- let $t$ be $\mathit{tP}\:\mathit{cp}\:\mathit{rp}$
+\item the Control continues by choosing a \emph{strategy}, depending on $\mathit{rp}$, for delivering the control, $\mathit{fq}\:\mathit{rp}$, for $Q\:t$
+\item the Response continues by asking for the $(Q\:t)$-response, $\mathit{rq}$ to that chosen control
+\item the traffic for the whole thing is the $P$-traffic paired with the $(Q\:t)$-traffic.
+\end{enumerate}
+
+Note that there is a function type in the control --- we choose the $Q$-control depending on the $P$-response --- but that the response type is resolutely a pair of responses, and thus ultimately a tuple of signals. It's the control type that tells you what the process is --- what's the function in your head? The response type is made of signals you can hear.
+
+Note also that the control types for protagonist and antagonist do not directly talk about each other. Rather, they use function types to abstract over whatever it is that they just have to put up with. As a consequence, any pair of protagonist and antagonist controls will be able to talk to each other effectively. Let's prove that.
+
+
+\section{we both remember it the same}
+
+It's quite tricky to even state what we need, here. Informally, given some $P:\Protocol$, we ask for the Controls for $\Play{P}$ and $\Oppo{P}$ --- what's in their heads --- and in return we promise to deliver both responses --- what they each say out loud --- and, moreover, to prove that both parties agree on what the traffic has been, even though they came by that information differently. The latter is crucial for $\Sg{P}{Q}$, because unless both parties agree on the traffic in the $P$-interaction, they won't even realise they're participating in the same $Q$-$\Protocol$.
+
+
+
+\end{document}

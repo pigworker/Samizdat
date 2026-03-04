@@ -1,0 +1,317 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%                                                         %%%%%%%%%%
+%%%%%%%%%%     Epigram LaTeX Style                                 %%%%%%%%%%
+%%%%%%%%%%                                                         %%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%% This file is intended to replace the old macros.ltx.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Colours                                                               %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\usepackage{color}
+\newcommand{\redFG}[1]{\textcolor[rgb]{0.6,0,0}{#1}}
+\newcommand{\greenFG}[1]{\textcolor[rgb]{0,0.4,0}{#1}}
+\newcommand{\blueFG}[1]{\textcolor[rgb]{0,0,0.8}{#1}}
+\newcommand{\orangeFG}[1]{\textcolor[rgb]{0.8,0.4,0}{#1}}
+\newcommand{\purpleFG}[1]{\textcolor[rgb]{0.4,0,0.4}{#1}}
+\newcommand{\yellowFG}[1]{\textcolor{yellow}{#1}}
+\newcommand{\brownFG}[1]{\textcolor[rgb]{0.5,0.2,0.2}{#1}}
+\newcommand{\blackFG}[1]{\textcolor[rgb]{0,0,0}{#1}}
+\newcommand{\whiteFG}[1]{\textcolor[rgb]{1,1,1}{#1}}
+\newcommand{\yellowBG}[1]{\colorbox[rgb]{1,1,0.2}{#1}}
+\newcommand{\brownBG}[1]{\colorbox[rgb]{1.0,0.7,0.4}{#1}}
+
+\newcommand{\ColourEpigram}{
+  \newcommand{\red}{\redFG}
+  \newcommand{\green}{\greenFG}
+  \newcommand{\blue}{\blueFG}
+  \newcommand{\orange}{\orangeFG}
+  \newcommand{\purple}{\purpleFG}
+  \newcommand{\yellow}{\yellowFG}
+  \newcommand{\brown}{\brownFG}
+  \newcommand{\black}{\blackFG}
+  \newcommand{\white}{\whiteFG}
+}
+
+\newcommand{\MonochromeEpigram}{
+  \newcommand{\red}{\blackFG}
+  \newcommand{\green}{\blackFG}
+  \newcommand{\blue}{\blackFG}
+  \newcommand{\orange}{\blackFG}
+  \newcommand{\purple}{\blackFG}
+  \newcommand{\yellow}{\blackFG}
+  \newcommand{\brown}{\blackFG}
+  \newcommand{\black}{\blackFG}
+  \newcommand{\white}{\blackFG}
+}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%% Inference Rules (some ancient macros by Conor)                        %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newlength{\rulevgap}
+\setlength{\rulevgap}{0.05in}
+\newlength{\ruleheight}
+\newlength{\ruledepth}
+\newsavebox{\rulebox}
+\newlength{\GapLength}
+\newcommand{\gap}[1]{\settowidth{\GapLength}{#1} \hspace*{\GapLength}}
+\newcommand{\dotstep}[2]{\begin{tabular}[b]{@{}c@{}}
+                         #1\\$\vdots$\\#2
+                         \end{tabular}}
+\newlength{\fracwid}
+\newcommand{\dotfrac}[2]{\settowidth{\fracwid}{$\frac{#1}{#2}$}
+                         \addtolength{\fracwid}{0.1in}
+                         \begin{tabular}[b]{@{}c@{}}
+                         $#1$\\
+                         \parbox[c][0.02in][t]{\fracwid}{\dotfill} \\
+                         $#2$\\
+                         \end{tabular}}
+\newcommand{\Rule}[2]{\savebox{\rulebox}[\width][b]                         %
+                              {\( \frac{\raisebox{0in} {\( #1 \)}}       %
+                                       {\raisebox{-0.03in}{\( #2 \)}} \)}   %
+                      \settoheight{\ruleheight}{\usebox{\rulebox}}          %
+                      \addtolength{\ruleheight}{\rulevgap}                  %
+                      \settodepth{\ruledepth}{\usebox{\rulebox}}            %
+                      \addtolength{\ruledepth}{\rulevgap}                   %
+                      \raisebox{0in}[\ruleheight][\ruledepth]               %
+                               {\usebox{\rulebox}}}
+\newcommand{\Case}[2]{\savebox{\rulebox}[\width][b]                         %
+                              {\( \dotfrac{\raisebox{0in} {\( #1 \)}}       %
+                                       {\raisebox{-0.03in}{\( #2 \)}} \)}   %
+                      \settoheight{\ruleheight}{\usebox{\rulebox}}          %
+                      \addtolength{\ruleheight}{\rulevgap}                  %
+                      \settodepth{\ruledepth}{\usebox{\rulebox}}            %
+                      \addtolength{\ruledepth}{\rulevgap}                   %
+                      \raisebox{0in}[\ruleheight][\ruledepth]               %
+                               {\usebox{\rulebox}}}
+\newcommand{\Axiom}[1]{\savebox{\rulebox}[\width][b]                        %
+                               {$\frac{}{\raisebox{-0.03in}{$#1$}}$}        %
+                      \settoheight{\ruleheight}{\usebox{\rulebox}}          %
+                      \addtolength{\ruleheight}{\rulevgap}                  %
+                      \settodepth{\ruledepth}{\usebox{\rulebox}}            %
+                      \addtolength{\ruledepth}{\rulevgap}                   %
+                      \raisebox{0in}[\ruleheight][\ruledepth]               %
+                               {\usebox{\rulebox}}}
+\newcommand{\RuleSide}[3]{\gap{\mbox{$#2$}} \hspace*{0.1in}               %
+                            \Rule{#1}{#3}                          %
+                          \hspace*{0.1in}\mbox{$#2$}}
+\newcommand{\AxiomSide}[2]{\gap{\mbox{$#1$}} \hspace*{0.1in}              %
+                             \Axiom{#2}                            %
+                           \hspace*{0.1in}\mbox{$#1$}}
+\newcommand{\RULE}[1]{\textbf{#1}}
+\newcommand{\hg}{\hspace{0.2in}}
+
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Emphasis                                                              %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% %%% It's good to separate definitional emphasis...
+% 
+% \newcommand{\demph}{\textbf}
+% 
+% %%% ...from rhetorical emphasis.
+% 
+% \newcommand{\remph}{\textit}
+% 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Identifier Fonts                                                      %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% \newcommand{\CN}{\textsf}
+% 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Expressions                                                           %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% \usepackage{upgreek}
+% 
+% \newcommand{\LAMBINDER}{\red{\uplambda}}
+% \newcommand{\Bhab}[2]{#1\!:\!#2}
+% \newcommand{\To}{\mathop{\blue{\rightarrow}}}
+% \newcommand{\mto}{\mathop{\red{\mapsto}}}
+% 
+% \newcommand{\PI}[2]{\blue{(}\Bhab{#1}{#2}\blue{)}\To}
+% \newcommand{\PIS}[1]{\blue{(}#1\blue{)}\To}
+% \newcommand{\LLAM}[2]{\LAMBINDER\Bhab{#1}{#2}\mto}
+% \newcommand{\LAM}[1]{\LAMBINDER #1 \mto}
+% 
+% \newcommand{\TYPE}{\blue{\star}}
+% \newcommand{\EQ}{\mathrel{\D{=}}}
+% 
+% \newcommand{\FROG}{\mbox{\(\backslash\!\!\!\mid\!\!\!\slash\)}}
+% 
+% \newcommand{\ang}[1]{\red{\left<\black{#1}\right>}}
+% \newcommand{\sqr}[1]{\red{\left[\black{#1}\right]}}
+% \newcommand{\rbar}{\red{|}}
+% 
+% \DeclareMathAlphabet{\mathkw}{OT1}{cmss}{bx}{n}
+% \newcommand{\K}[1]{\mathkw{#1}}
+% \newcommand{\M}[1]{\mathit{#1}}
+% \newcommand{\V}[1]{\purple{\mathit{#1}}}
+% \newcommand{\p}{\purple{'}}
+% \newcommand{\D}[1]{\blue{\CN{#1}}}
+% \newcommand{\tag}[1]{\red{\CN{#1}}}
+% \newcommand{\C}[2]{\ang{\tag{#1}#2}}
+% \newcommand{\F}[1]{\green{\CN{#1}}}
+% \newcommand{\U}[1]{\orange{\CN{#1}}}
+% 
+% \newcommand{\Enum}{\D{Enum}}
+% \newcommand{\enum}[1]{\D{enum}\:#1}
+% 
+% \newcommand{\Sig}{\D{Sig}}
+% \newcommand{\dom}[1]{\F{dom}\:#1}
+% \newcommand{\sig}[1]{\D{sig}\:#1}
+% \newcommand{\Refl}{\overline}
+% 
+% \newcommand{\Rhab}{:}
+% 
+% \newcommand{\Ret}[1]{\:\FATR\:#1}
+% \newcommand{\By}[1]{\:\FATL\:#1}
+% \newcommand{\Refute}[1]{\:\FROG\:#1}
+% \newcommand{\With}[1]{\:\&\:#1}
+% 
+% \newcommand{\refl}[1]{\purple{\overline{\black{#1}}}}
+% \newcommand{\coe}[4]{#4\:\green{\left[\black{#3:#1\EQ#2}\right>}}
+% \newcommand{\coh}[4]%
+%   {#4\:\green{\left[\!\left[\black{#3:#1\EQ#2}\right|\!\right>}}
+% 
+% \newcommand{\qcoe}[3]{#1\:\green{\F{coe}(\black{#2\EQ #3})}}
+% \newcommand{\qcoh}[3]{#1\:\green{\F{coh}(\black{#2\EQ #3})}}
+% \newcommand{\qcong}[3]{#1\:\green{\F{cong}(\black{#2:#3})}}
+% 
+% \newcommand{\naughtE}[1]{#1\:\green{\FROG}}
+% \newcommand{\caseE}[1]{#1\:\F{case}}
+% \newcommand{\ExpandE}[1]{#1\:\F{Expand}}
+% \newcommand{\DecodeE}[1]{#1\:\F{Decode}}
+% \newcommand{\KitE}[2]{#1\:\F{Kit(}#2\F{)}}
+% \newcommand{\hd}{\green{\bullet}}
+% \newcommand{\tl}{\green{-}}
+% \newcommand{\rZ}{\red{\mathsf{0}}}
+% \newcommand{\rS}{\red{\mathsf{S}}}
+% 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Grammars                                                              %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% \newcommand{\SC}{\textsc}  %% syntactic category
+% \newcommand{\Grammar}[2]{
+%   \begin{array}[t]{rrll}
+%     #1 & ::= & #2
+%   \end{array}
+% }
+% \newcommand{\Gor}{\\ & | &}  %% separator making new row of array
+% \newcommand{\GNew}[1]{\medskip \\ #1 & ::= &}
+% \newcommand{\Gbr}[2]{\!\left\lgroup #2 \right\rgroup^{\!\!#1}}
+% 
+% \newcommand{\wbox}{\square}
+% \newcommand{\bbox}{\blacksquare}
+% 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Judgments                                                             %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% \newcommand{\EC}{\mathcal{E}}
+% \newcommand{\Tn}{\vdash}
+% \newcommand{\Eq}{\equiv}
+% \newcommand{\x}{\V{x}}
+% \newcommand{\xS}{\Bhab{\x}{S}}
+% 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Computation Relations                                                 %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% \usepackage{amssymb}
+% \newcommand{\step}[1]{\leadsto_{#1}}
+% 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Meta-Computation Relations                                            %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% \newcommand{\mq}{\mathrel{\Longrightarrow}}
+% 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Nonexamples                                                           %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% %%% Non-examples in display math must be explicitly marked as such, in order
+% %%% to avoid dangerous wrong learnings.
+% 
+% \newcommand{\BAD}{\mbox{\(\red{(\times)}\)}}
+% \newcommand{\NONEXAMPLE}[1]{
+% \[
+% \BAD\qquad
+% #1
+% \]%
+% }
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Source                                                                %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% \newenvironment{source}{\[\begin{array}[t]{ll}}{\end{array}\]}
+% 
+% \newcommand{\letH}[2]{\K{let} & #1 \quad #2}
+% \newcommand{\letV}[2]{\K{let} & #1 \\ #2}
+% 
+% \newcommand{\sgap}{\medskip \\}
+% \newcommand{\X}{l@{\:}}
+% \newcommand{\I}{@{\!\_}l@{}}
+% \newcommand{\prog}[2]{\begin{array}[t]{@{}#1}#2\end{array}}
+% \newcommand{\dent}[2]{\multicolumn{#1}{@{\;\;}l}{#2}}
+% \newcommand{\UPI}[1]{\PIBINDER{#1}\FATR}
+% \newcommand{\ULAM}[1]{\LAMBINDER{#1}\FATR}
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Vertical Arrangement                                                  %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% \newcommand{\STL}[1]{\begin{array}[t]{@{}l@{}}#1\end{array}}
+% \newcommand{\STC}[1]{\begin{array}[t]{@{}c@{}}#1\end{array}}
+% \newcommand{\CASES}[1]{\begin{array}[t]{@{}l@{\;\mapsto\;}l@{}}#1\end{array}}
+% 
+% 
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %%% Ecce                                                                  %%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 
+% \newcommand{\ecce}[1]{\begin{array}{@{}l@{\;}l}#1\end{array}}
+% 
+% \newcommand{\ecDEFN}[4]{
+% \F{#1}&[\\
+% \multicolumn{2}{@{}l}{\quad\ecce{#2}}\\
+% \;]&\FATR\;#3\;:\:#4 \\
+% }
+% \newcommand{\ecDefn}[4]{
+% \F{#1} & [#2]\;\FATR\;#3\;:\:#4 \\
+% }
+% \newcommand{\ecdefn}[3]{
+% \F{#1} & \FATR\;#2\;:\:#3 \\
+% }
+% \newcommand{\ecHOLE}[3]{
+% \U{#1} & [\\
+% \multicolumn{2}{@{}l}{\quad\ecce{#2}}\\
+% \;]&\FATR\;?\;:\:#3\\
+% }
+% \newcommand{\ecHole}[3]{
+% \U{#1}&[#2]\;\FATR\;?\;:\:#3 \\
+% }
+% \newcommand{\echole}[2]{
+% \U{#1} & \FATR\;?\;:\:#2 \\
+% }
+% \newcommand{\ecpara}[2]{
+% \V{#1} & :\;#2 \\
+% }
+% 

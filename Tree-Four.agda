@@ -77,20 +77,30 @@ tt && b = b
 sbst2 : forall {X} -> Tree Two -> Tree X -> Tree X -> Tree X
 sbst2 n s t = n >>= (s <ft> t)
 
-xform : forall {X} -> Tree X -> Tree Two -> Tree Zero -> Tree X
-xform l n leaf = l
-xform l n (s /\ t) = sbst2 n (xform l n s) (xform l n t)
+module _ {X}
+      -- a template comprising
+         (l : Tree X)    -- the output for leaf
+         (n : Tree Two)  -- how to build the output for a node
+                         -- from the outputs of its subtrees
+         where
 
-degeneracy : forall {X}(l : Tree X)(n : Tree Two)
-  -> xform l n (leaf /\ leaf) ~ xform l n leaf
-  -> (t : Tree Zero) -> xform l n t ~ l
-degeneracy l n q leaf = r~
-degeneracy l n q (s /\ t) = 
-  xform l n (s /\ t) ~[ r~ >
-  sbst2 n (xform l n s) (xform l n t)
-    ~[ rf (sbst2 n) ~$~ degeneracy l n q s ~$~ degeneracy l n q t >
-  sbst2 n l l ~[ q >
-  l [QED]
+  -- we get a fold!
+  xform : Tree Zero {- X ? -} -> Tree X
+  xform leaf     =       l
+  xform (s /\ t) = sbst2 n (xform s) (xform t)
+
+  degeneracy :
+       -- if xform conflates the *basis*
+       xform (leaf /\ leaf) ~ xform leaf
+       -- then it's entirely degenerate
+    -> (t : Tree Zero) -> xform t ~ l
+  degeneracy q leaf = r~
+  degeneracy q (s /\ t) = 
+    xform (s /\ t) ~[ r~ >
+    sbst2 n (xform s) (xform t)
+      ~[ rf (sbst2 n) ~$~ degeneracy q s ~$~ degeneracy q t >
+    sbst2 n l l ~[ q >
+    l [QED]
 
 record _><_ (S : Set)(T : S -> Set) : Set where
   constructor _,_
@@ -142,48 +152,63 @@ data Fwd (X : Set) : Set where
   [] : Fwd X
   _,-_ : X -> Fwd X -> Fwd X
 
+-- fish
 _<><_ : {X : Set} -> Bwd X -> Fwd X -> Bwd X
 xz <>< [] = xz
 xz <>< (x ,- xs) = (xz -, x) <>< xs
 
+-- chips
 _<>>_ : {X : Set} -> Bwd X -> Fwd X -> Fwd X
 [] <>> xs = xs
 (xz -, x) <>> xs = xz <>> (x ,- xs)
 
+-- cat
 _>>>_ : {X : Set} -> Fwd X -> Fwd X -> Fwd X
 [] >>> ys = ys
 (x ,- xs) >>> ys = x ,- (xs >>> ys)
 
+-- the derivative of Tree's functor, instantiated at tree
+-- gives one layer of zipper structure
 DTree : Set -> Set
 DTree X = Two * Tree X
 
+-- reinsert the missing tree
 upTree : {X : Set} -> DTree X -> Tree X -> Tree X
 upTree (ff , x) s = s /\ x
 upTree (tt , x) s = x /\ s
 
+-- zippers are a backward list of layers (head is hole)
 TZ : Set -> Set
 TZ X = Bwd (DTree X)
 
+-- substitution for zippers
 zsub : {X Y : Set} -> TZ X -> (X -> Tree Y) -> TZ Y
 zsub [] k = []
 zsub (z -, (b , t)) k = zsub z k -, (b , (t >>= k))
 
+-- insertion at the head end...
 gulp : {X : Set} -> TZ X -> Tree X -> Tree X
 gulp [] t = t
 gulp (lz -, l) t = gulp lz (upTree l t)
 
+--- ...commutes with substitition
 zsub-gulp : {X Y : Set}(z : TZ X)(t : Tree X)(k : X -> Tree Y)
   -> (gulp z t >>= k) ~ gulp (zsub z k) (t >>= k)
 zsub-gulp [] t k = r~
 zsub-gulp (z -, (ff , s)) t k = zsub-gulp z (t /\ s) k
 zsub-gulp (z -, (tt , s)) t k = zsub-gulp z (s /\ t) k
 
+-- but you can also make a context where head is root...
 TS : Set -> Set
 TS X = Fwd (DTree X)
 
+-- ...and the hole is at the tail end
 plug : {X : Set} -> TS X -> Tree X -> Tree X
 plug [] t = t
 plug (l ,- ls) t = upTree l (plug ls t)
+
+
+-- a bunch of lemmas about context concatenation
 
 gulp-fish : {X : Set} -> (lz : TZ X)(ls : TS X)(t : Tree X)
   -> gulp lz (plug ls t) ~ gulp (lz <>< ls) t
@@ -200,6 +225,8 @@ plug-cat : {X : Set}(ls ms : TS X)(t : Tree X) ->
 plug-cat [] ms t = r~
 plug-cat (x ,- ls) ms t = rf (upTree x) ~$~ plug-cat ls ms t
 
+-- lemmas about emptiness whole => all parts
+
 cat-nil : {X : Set}(xs ys : Fwd X) -> (xs >>> ys) ~ [] ->
   (xs ~ []) * (ys ~ [])
 cat-nil [] ys q = r~ , q
@@ -210,6 +237,9 @@ chips-nil : {X : Set}(xz : Bwd X)(xs : Fwd X)
 chips-nil [] xs q = r~ , q
 chips-nil (xz -, x) xs q
   with _ , () <- chips-nil xz (x ,- xs) q
+
+
+-- no cycles! (way easier with plug than with gulp)
 
 plug-nocy : {X : Set}(ls : TS X)(s : Tree X)
   -> plug ls s ~ s
@@ -229,6 +259,8 @@ plug-nocy ((tt , x) ,- ls) (sa /\ sb) q with ql , qr <- treeNoConf q
     sb [QED])
   with _ , () <- cat-nil ls (_ ,- []) bad
 
+-- the gulp version then drops out by abacussery
+
 gulp-nocy : {X : Set}(lz : TZ X)(s : Tree X)
   -> gulp lz s ~ s
   -> lz ~ []
@@ -242,8 +274,18 @@ gulp-nocy lz s q
 
 
 unsub : {X : Set}(z : TZ Zero)(k : X -> Tree Zero)(t : Tree X)
+  -- k is a substitution which maps all variables to the
+  -- same term, foo
+  -- we are wandering around inside foo
   -> ((x : X) -> gulp z (t >>= k) ~ k x)
+              -- ^^^^^^ foo ^^^^^
+  -- we find ourselves at a subterm of foo which is the
+  -- image of some t
+  -- EITHER
+     -- t contains no variables: it's a constant subterm of foo
   -> (t ~ inflate (t >>= k))
+  -- OR
+     -- t is a variable, so its image is foo, so we're at the *root* of foo
    + ((z ~ []) * (X >< \ x -> t ~ [ x ]))
 unsub [] k [ x ] q = tt , r~ , x , r~
 unsub (z -, l) k [ x ] q with () <- gulp-nocy (z -, l) _ (q x)
@@ -251,6 +293,24 @@ unsub z k leaf q = ff , r~
 unsub z k (tl /\ tr) q
   with unsub (z -, (ff , _)) k tl q | unsub (z -, (tt , _)) k tr q
 ... | ff , x | ff , y = ff , (rf _/\_ ~$~ x ~$~ y)
+
+
+
+-- now the mechanism for guessing the template
+-- or at least tha node part, anyway
+
+-- we're wandering around n, s and t, where
+--                 leaf                |->  l
+--        leaf      /\      leaf       |->  n
+--   (leaf /\ leaf) /\      leaf       |->  s
+--        leaf      /\ (leaf /\ leaf)  |->  t
+
+-- looking for subterms where n has l
+-- when we find such a thing,
+--   if s has something that's not l, guess left variable
+--   if t has something that's not l, guess right variable
+
+-- i.e., perturbation testing, aka jiggling
 
 jiggle : (l n s t : Tree Zero) -> Tree Two
 jiggle l n s t with l =?= n | l =?= s | l =?= t
@@ -262,6 +322,7 @@ jiggle l (nl /\ nr) (sl /\ sr) (tl /\ tr) | ff , _ | _ | _ =
   jiggle l nl sl tl /\ jiggle l nr sr tr
 jiggle l (nl /\ nr) s t | ff , _ | _ | _ = inflate (nl /\ nr) 
 
+-- the wrapper for jiggle kicks off with the data we need
 wiggle : (Tree Zero -> Tree Zero) -> (Tree Zero -> Tree Zero)
 wiggle f = xform (f leaf)
   (jiggle (f leaf)
@@ -269,6 +330,8 @@ wiggle f = xform (f leaf)
     (f ((leaf /\ leaf) /\ leaf))
     (f (leaf /\ (leaf /\ leaf))))
 
+-- lemma which says constant trees stay put whatever
+-- you substitute
 kontree : {X : Set}(c : Tree Zero)(t : Tree X)
   (f g : X -> Tree Zero)
   -> t ~ inflate c
@@ -278,11 +341,16 @@ kontree c t f g r~ =
    (c >>= [_]) < compo noughtE g [_] (\ ()) c ]~
    ((c >>= noughtE) >>= g) [QED]
 
+-- if an xform is not degenerate, then jiggle recovers
+-- *exactly* the template
 jigglem : (l : Tree Zero)(z : TZ Two)(n : Tree Two)
-  -> let t = gulp z n in
+                      -- ^^^^^^^^^^^^ wandering around
+                      -- the template
+  -> let t = gulp z n in  -- t is the whole node template
      let f = xform l t in let fl = f leaf in
      let fnll = f (leaf /\ leaf) in
      fl # fnll
+     -- jiggle correctly gueses this subtree
   -> jiggle fl (n >>= (fl <ft> fl))
        (n >>= (fnll <ft> fl))
        (n >>= (fl <ft> fnll))
@@ -318,18 +386,24 @@ jigglem l z (ns /\ nt) a | ff , x
   = rf _/\_ ~$~ jigglem l (z -, (ff , nt)) ns a
             ~$~ jigglem l (z -, (tt , ns)) nt a
 
-
+-- whether our xform is degenerate or not,
+-- our guessed template does the xform's job
 claim : (l : Tree Zero)(n : Tree Two)(t : Tree Zero) ->
     (xform l n leaf # xform l n (leaf /\ leaf))
   + (xform l n leaf ~ xform l n (leaf /\ leaf))
   -> wiggle (xform l n) t ~ xform l n t
-claim l n t (ff , x) = 
+claim l n t (ff , x) = -- we're not degenerate
   xform l
       (jiggle l (n >>= (l <ft> l)) (n >>= ((n >>= (l <ft> l)) <ft> l))
        (n >>= (l <ft> (n >>= (l <ft> l)))))
       t
       ~[ rf (\ n -> xform l n t) ~$~ jigglem l [] n x >
+         -- we guessed exactly the template!
   xform l n t [QED]
+  -- if we are degenerate, then the
+  -- template must be a constant or an unwrapped variable
+  -- and jiggle will guess the constant template
+  -- but it doesn't matter
 claim l n t (tt , x) with l =?= (n >>= (l <ft> l))
 ... | ff , y = kaboom x y
 ... | tt , y with l =?= (n >>= ((n >>= (l <ft> l)) <ft> l))
