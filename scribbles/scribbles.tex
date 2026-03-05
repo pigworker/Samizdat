@@ -242,8 +242,69 @@ Note also that the control types for protagonist and antagonist do not directly 
 
 \section{we both remember it the same}
 
-It's quite tricky to even state what we need, here. Informally, given some $P:\Protocol$, we ask for the Controls for $\Play{P}$ and $\Oppo{P}$ --- what's in their heads --- and in return we promise to deliver both responses --- what they each say out loud --- and, moreover, to prove that both parties agree on what the traffic has been, even though they came by that information differently. The latter is crucial for $\Sg{P}{Q}$, because unless both parties agree on the traffic in the $P$-interaction, they won't even realise they're participating in the same $Q$-$\Protocol$.
+It's quite tricky to even state what we need, here. Informally, given some $P:\Protocol$, we ask for the Controls for $\Play{P}$ and $\Oppo{P}$ --- what's in their heads --- and in return we promise to deliver both responses --- what they each say out loud --- and, moreover, to prove that both parties agree on what the traffic has been, even though they came by that information differently. The latter is crucial for $\Sg{Q}{R}$, because unless both parties agree on the traffic in the $Q$-interaction, they won't even realise they're participating in the same $R$-protocol.
 
 
+\newcommand{\EQ}{\mathrel{\blue{=}}}
+Let's say that in types:
+\[
+\F{interact} : \begin{array}[t]{l}
+  (P:\Protocol)\to\\
+    \lett{\pr{\mathit{PC}}{\mathit{PK}}}{\Play{P}}{
+      \lett{\pr{\mathit{AC}}{\mathit{AK}}}{\Oppo{P}}{\\
+        (\mathit{pc}:\mathit{PC})\to(\mathit{ac}:\mathit{AC})\to\\
+        \lett{\pr{\mathit{PR}}{\mathit{pt}}}{\mathit{PK}\:\mathit{pc}}{
+          \lett{\pr{\mathit{AR}}{\mathit{at}}}{\mathit{AK}\:\mathit{ac}}
+               {\\
+                 (\pr{\mathit{pr}}{\mathit{ar}}:\mathit{PR}\times\mathit{AR})\times \\
+                 \mathit{pt}\:\mathit{pr} \EQ \mathit{at}\:\mathit{ar}
+                 }}
+    }}
+               \end{array}
+\]
+That's a bit of a mouthful, but it tells a story. Once we have the protocol, $P$, we can unpack the Control types $\mathit{PC}$ and $\mathit{AC}$ from both parties. Now we can ask for the Control strategies for both, which then lets us unpack the Response types and the traffic functions. We promise to deliver the pair of responses (``raperorum'', in a word from the late great Stanley Baxter) and show that the parties agree on what the traffic was.
+
+The crucial base case is for sending:
+\[
+\F{interact}\:\send{S}\:s\:\vd = \pr{\pr{\vd}{s}}{\C{refl}}
+\]
+The signal that is the protagonist's Control becomes the response to the Antagonist, so they both agree it's the same signal.
+
+To switch roles, we conjugate by swapping:
+\[
+\F{interact}\:\op{P}\:\mathit{pc}\:\mathit{ac} =
+\lett{\pr{\pr{\mathit{ar}}{\mathit{pr}}}{q}}{\F{interact}\:P\:\mathit{ac}\:\mathit{pc}}
+     {\pr{\pr{\mathit{pr}}{\mathit{ar}}}{\F{sym}\:q}}
+\]
+
+Doing nothing is easy:
+\[
+\F{interact}\:\C{1}\:\vd\:\vd = \pr{\pr{\vd}{\vd}}{\C{refl}}
+\]
+
+The fun case is, of course, the sequential composition. Let's make a start
+\[
+\begin{array}{@{}l}
+  \F{interact}\:(\Sg{Q}{R})\:\pr{\mathit{pQc}}{\mathit{pQk}}\:\pr{\mathit{aQc}}{\mathit{aQk}} =\\
+  \quad
+\begin{array}[t]{@{}l}
+  \lett{\pr{\pr{\mathit{pQr}}{\mathit{aQr}}}{\mathit{Qq}}}{\F{interact}\:Q\:\mathit{pQc}\:\mathit{aQc}}
+       {\\ \lett{\mathit{pRc}}{\mathit{pQk}\:\mathit{pQr}}{\lett{\mathit{aRc}}{\mathit{aQk}\:\mathit{aQr}}{\\ ?
+             }}}}
+\end{array}
+\end{array}\]
+We've got to the middle. We unpacked the Contols for the $Q$-protocol, run the $Q$-interaction
+and collected the $Q$-responses. Moreover, feeding those responses to the continuation strategies yields Controls for the $R$-protocol each party imagines come next, depending each on their own perception of the $Q$-traffic. However, we have a \emph{proof}, $\mathit{Qq}$, that those perceptions coincide. On paper, we carry on
+\[
+\quad
+\begin{array}[t]{@{}l}
+  \lett{\pr{\pr{\mathit{pRr}}{\mathit{aRr}}}{\mathit{Rq}}}{\F{interact}\:(R\:\_)\:\mathit{pRc}\:\mathit{aRc}}
+       {\\ \pr{\pr{\pr{\mathit{pQr}}{\mathit{pRr}}}{\pr{\mathit{aQr}}{\mathit{aRr}}}}
+            {\pr{\mathit{Qq}}{\mathit{Rq}}}}}}
+\end{array}
+\]
+But that's making imaginary equality reflection do a lot of heavy lifting. In an intensional type theory, you have genuine intensional splay between the $R$-protocols the two parties think they're playing at, and you have to use $\mathit{Qq}$, to achieve the good kind of conversion therapy, where you $\F{J}$ the splay away.
+
+I'm trying to find my Agda code for this. I know it exists somewhere. I found something somewhere. The good move is to use the path-over-a-path kind of heterogeneous equality where you bookkeep the reason why your far-apart feet are joined at the waist. You interact in accordance with provably equal protocols and deliver a heterogeneous equation (over the protocol equation) that you get equal traffic.
 
 \end{document}
