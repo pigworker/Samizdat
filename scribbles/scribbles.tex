@@ -414,4 +414,13 @@ and that we may shuffle congruence around in the dependent equality:
 \heq{\protocol{W\:\cdot}}{\mathit{qV}}{\mathit{tPW}}{\mathit{tAW}}
 \]
 
+
+\section{clemens's round}
+
+Now suppose there are \emph{three} parties, me and two others: let's call them `Alasdair' and `Clemens'. I can have a long and private conversation with Alasdair about whose round it is, in which we conclude that it is Clemens's round, but if \emph{Clemens} doesn't know it's his round, we're not getting pints.
+
+That's to say, the two-party problem makes life easy, because both are party to every signal, either as sender or receiver, so both know the traffic completely. Once there are three parties, there are secrets. Now, we have ways to represent secrets, because the `zero' modality of Quantitative Type Theory (which I invented while staring at an empty pint glass) allows us to mark some fields of a Response record as unavailable at run time.
+
+My point is that that's not enough. Multi-party dependent session types should not only track who knows what (including the ability for a later signal to report an earlier one and thus share what was formerly secret), but also ensure that the protocol respects need-to-know.
+
 \end{document}
