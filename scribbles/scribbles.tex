@@ -423,4 +423,21 @@ That's to say, the two-party problem makes life easy, because both are party to 
 
 My point is that that's not enough. Multi-party dependent session types should not only track who knows what (including the ability for a later signal to report an earlier one and thus share what was formerly secret), but also ensure that the protocol respects need-to-know.
 
+
+\section{who's $\upmu$?}
+
+Remember that game we played? I tell you a number then you tell me one. Let's suppose we stop doing the 64-bit cheating thing and use yer actual spuds-and-lemons numbers. That's to say you communicate a number by saying ``spud'' your number of times, before signing off with ``lemon''.
+
+In stage one of this protocol, I'm responsible for getting to the lemon eventually, so I'm inductive, and you have to be always ready for another spud, so you're coinductive. Then in stage two, these roles reverse.
+
+We could play a more interesting game, where you can keep asking me for numbers until you've had enough. You're responsible for eventually having enough numbers, so you're inductive, and I'm repsonsible for always being ready to send you another number if you want one, so I'm coinductive. But, \emph{locally}, when I'm in the process of sending you a number, it's me who has to get to the lemon eventually.
+
+That's to say, in any given subprotocol, one party is responsible for the eventual termination of that subprotocol, they're the $\upmu$ (least fixpoint) amongst $\upnu$s (greatest fixpoint), but that responsibility can be pushed on the stack when we enter a subsubprotocol and recovered later.
+
+In general, to extend the notio of dependent session type I've been talking about to \emph{recursive} protocols, we'll need a fixpoint operator in the protocol language. That will cash out as a first order inductive type in the traffic. But to ensure that the traffic is indeed finite, we shall have to ensure that the protagonist's Control is a higher-order inductive type, and that the antagonists' Controls are higher-order \emph{coinductive} types. That is to say, the protagonist when we enter a subprotocol is responsible for ensuring we leave it.
+
+As a consequence, we now see that Control types for recursive sessions must allow arbitrary interleavings of $\upmu$ and $\upnu$, in a hierarchy which we know from Julian Bradfield foes not collapse. No current implementation of type theory gives effective support for these gnarly modes of recursion. The game's a bogey!
+
+(And indeed, the type theorists in MSP know we're not going to lure Clemens Kupke into our clutches until he can have modal $\upmu$-calculus fun, and we're nowhere near making that happen.)
+
 \end{document}
