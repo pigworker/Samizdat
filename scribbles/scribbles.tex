@@ -225,7 +225,7 @@ like that function in your head, shows up.
 (\mathit{aC}:A\:.\F{Control})\times\\
   (\mathit{aR}:A\:.\F{Response}\:\mathit{aC})\to\\
   \lett{\mathit{at}}{A\:.\F{traffic}\:\mathit{aC}\:\mathit{aR}}
-    {\\ B\:\mathit{at}}
+    {\\ B\:\mathit{at}\:.\F{Control}}
 \end{array}
 \]
 You get to \emph{think}
@@ -235,10 +235,11 @@ and a $B$ response to the $B$ control computed by your function.
 \[
 \F{P\Upsigma}\:A\:B\:.\F{Response}\:\pr{\mathit{aC}}{\mathit{bK}} =
 \begin{array}[t]{@{}l}
-  (\mathit{aR}:A\:.\F{Response}\:\mathit{aC})\times\\
+  \Sg{(A\:.\F{Response}\:\mathit{aC})}
+  {\lam{\mathit{aR}}{\\
   \lett{\mathit{at}}{A\:.\F{traffic}\:\mathit{aC}\:\mathit{aR}}
     {\\ B\:\mathit{at}.\F{Response}\:
-    (\mathit{bK}\:\mathit{aR})}
+    (\mathit{bK}\:\mathit{aR})}}}
 \end{array}
 \]
 Finally, the traffic is the only thing that fits!
@@ -436,8 +437,11 @@ That's to say, in any given subprotocol, one party is responsible for the eventu
 
 In general, to extend the notio of dependent session type I've been talking about to \emph{recursive} protocols, we'll need a fixpoint operator in the protocol language. That will cash out as a first order inductive type in the traffic. But to ensure that the traffic is indeed finite, we shall have to ensure that the protagonist's Control is a higher-order inductive type, and that the antagonists' Controls are higher-order \emph{coinductive} types. That is to say, the protagonist when we enter a subprotocol is responsible for ensuring we leave it.
 
-As a consequence, we now see that Control types for recursive sessions must allow arbitrary interleavings of $\upmu$ and $\upnu$, in a hierarchy which we know from Julian Bradfield foes not collapse. No current implementation of type theory gives effective support for these gnarly modes of recursion. The game's a bogey!
+As a consequence, we now see that Control types for recursive sessions must allow arbitrary interleavings of $\upmu$ and $\upnu$, in a hierarchy which we know from Julian Bradfield does not collapse. No current implementation of type theory gives effective support for these gnarly modes of recursion. The game's a bogey!
 
 (And indeed, the type theorists in MSP know we're not going to lure Clemens Kupke into our clutches until he can have modal $\upmu$-calculus fun, and we're nowhere near making that happen.)
+
+
+
 
 \end{document}
