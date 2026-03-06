@@ -11,6 +11,10 @@
 \newcommand{\F}[1]{\green{\ensuremath{\mathrm{#1}}}}
 \newcommand{\N}[1]{\black{\ensuremath{#1}}}
 
+\newcommand{\lett}[3]{\mathrm{let}\;#1 = #2\;\mathrm{in}\; #3}
+\newcommand{\lam}[2]{\red{\uplambda} #1.\:#2}
+
+
 \begin{document}
 \title{fevered scribblings\\ from an unkempt mind}
 \author{conor mc bride}
@@ -40,6 +44,8 @@ To remark, briefly, upon dependent linear types, it's a basic Curry-Howard-ist p
 \newcommand{\signal}[1]{\green{\ensuremath{\llbracket \N{#1} \rrbracket_{\Signal}}}}
 \newcommand{\Protocol}{\D{\mathbb{P}}}
 \newcommand{\protocol}[1]{\green{\ensuremath{\llbracket \N{#1} \rrbracket_{\Protocol}}}}
+\newcommand{\Record}{\D{\mathbb{R}}}
+\newcommand{\record}[1]{\green{\ensuremath{\llbracket \N{#1} \rrbracket_{\Record}}}}
 \newcommand{\SET}{\D{\mathsf{Set}}}
 \newcommand{\vd}{\C{\langle\rangle}}
 \newcommand{\send}[1]{\C{!}#1}
@@ -54,24 +60,45 @@ If you chose $\Signal = 1$, $\signal\vd = 2$, I should not call you a fool, but 
 
 So now our mission is to construct a universe of protocols built from signals
 \[
-\Protocol : \SET \qquad \protocol\cdot : \Protocol\to\SET
+\Protocol : \SET \qquad \protocol{X : \Protocol} : \SET
 \]
 where %$\protocol\cdot$
 tells you the protocol's type of signal traffic. Let's do this by Dybjer and Setzer's \emph{induction-recursion}, allowing us to talk about traffic while we're in the process of talking about protocols.
 
-We shall need primitive stuff and structure. What's the stuff?
-\[\begin{array}{ll@{\quad}l}
-\send{(S:\Signal)} : \Protocol & \protocol{\send{S}} = \signal{S} & \mbox{send a signal} \\
-\op{(P:\Protocol)} : \Protocol & \protocol{\op{P}} = \protocol{P} & \mbox{exchange sender and receiver}
-\end{array}\]
-That's to say that the most primitive protocol is to send a signal (it's the sending bang, not the linear logic bang), and its traffic is the signal sent. We can also construct the protocol to receive a signal with $\op{(\send{S})}$, with no change to the data the traffic consists of.
+Gently does it, though! Let's start by saying something simpler,
+namely what it is to be a mere \emph{record} of signals. It's
+important to notice that the traffic is not any old type, but
+indeed, a record of signals!
+\[
+\Record : \SET \qquad \record{X : \Record} : \SET
+\]
 
-Now, for structure, we shall need dependent sequential composition.
-\[\begin{array}{l@{\quad}l@{\quad}l}
-\C{1} : \Protocol & \protocol{\C{1}} = \D{1} & \mbox{skip} \\
-\Sg{(P:\Protocol)}{(Q:\protocol{P}\to\Protocol)} : \Protocol & \protocol{\Sg{P}{Q}} = (p:\protocol{P})\times\protocol{Q\:p} & \mbox{$P$ then $Q$}
+A record can store one signal, and we also have the structure required to form arbitrary dependent tuples.
+\[\begin{array}{rr@{\;=\;}l@{\quad}l}
+\send{(S:\Signal)} : \Record & \record{\send{S}} & \signal{S} & \mbox{store} \\
+\C{1} : \Record & \record{\C{1}} & \D{1} & \mbox{skip} \\
+\Sg{(V:\Record)}{(W:\record{V}\to\Record)} : \Record & \record{\Sg{V}{W}} & (v:\record{V})\times\record{W\:v} & \mbox{$V$ then $W$}
 \end{array}\]
-And that's my point: in `$P$ then $Q$`, it makes sense to allow the subsequent $Q$ to depend on the traffic from $P$. The traffic for the whole the the dependent pair of the traffic for both. Traffic thus amounts to a dependent record type of the signals exchanged, without regard to who said what.
+
+\newcommand{\preco}[1]{{#1}^{\F{\ast}}}
+Now, for protocols, we need all the same stuff and something more.
+We have \emph{two} parties now, so we need a way to flip whose turn it is to send. Let's define
+\[
+\Protocol : \SET \qquad \preco{(X : \Protocol)} : \Record \qquad
+\protocol{X} = \record{\preco{X}}
+\]
+
+All we need add is that switching who's sending has no impact on
+the structure of signal traffic.
+
+\[\begin{array}{rr@{\;=\;}l@{\quad}l}
+\send{(S:\Signal)} : \Protocol & \preco{\send{S}} & \signal{S} & \mbox{send a signal} \\
+\op{(X:\Protocol)} : \Protocol & \preco{\op{X}} & \preco{X} & \mbox{swap} \\
+\C{1} : \Protocol & \preco{\C{1}} & \C{1} & \mbox{skip} \\
+\Sg{(V:\Protocol)}{(W:\protocol{V}\to\Protocol)} : \Protocol & \preco{(\Sg{V}{W})} & \Sg{\preco{V}}{\preco{(W\:\cdot)}}
+ & \mbox{$V$ then $W$}
+\end{array}\]
+And that's my point: in `$V$ then $W$`, it makes sense to allow the subsequent $W$ to depend on the traffic record from $V$. The traffic for the whole the the dependent pair of the traffic for both.
 
 So, we've said what it is to \emph{be} a protocol, but what is it to be a process which \emph{follows} a protocol? I have two answers to that question, and some learning occurred between one and the other, so let's have both.
 
@@ -82,8 +109,6 @@ So, we've said what it is to \emph{be} a protocol, but what is it to be a proces
 \newcommand{\Oppo}[2]{\F{Antagonist}\:#1\:#2}
 \newcommand{\interact}[3]{\F{synthesis}\:#1\:#2\:#3}
 \newcommand{\pr}[2]{\red{\langle\N{#1},\N{#2}\rangle}}
-\newcommand{\lett}[3]{\mathrm{let}\;#1 = #2\;\mathrm{in}\; #3}
-\newcommand{\lam}[2]{\red{\uplambda} #1.\:#2}
 
 My first attempt to interpret protocols as types of processes gave a kind of proof-relevant weakest-precondition semantics, where each of the parties to protocol $P$ has some \emph{goal} $G:\protocol{P}\to\SET$ expressing what, to them, about the traffic in a $P$ interaction would make them $H$ for happy. We thus need to define (mutually) the parts in our drama
 \[\begin{array}{l}
@@ -97,7 +122,7 @@ to say what is the precondition for each to achieve their goals, $G$ and $H$ res
 \]
 which is to say that the entire protocol runs, generating a complete record of its traffic, and both parties are satisfied with the outcome.
 
-For our `stuff', we have
+For our signal apparatus, we have
 \[\begin{array}{l@{\qquad}r}
 \Play{\send{S}}{G} = (s:S)\times G\:S &
 \Oppo{\send{S}}{H} = (s:S)\to H\:S \\
@@ -113,7 +138,7 @@ For our `stuff', we have
 \end{array}\]
 So, your functional structure from our little game shows up in the processes, as the receiver of a signal needs a strategy to be happy, whatever it is, while the sender must choose wisely on their own part. Meanwhile, for $\op{P}$, we literally exchange roles!
 
-Now, for structure, we have
+Now, for tuple structure, we have
 \[\begin{array}{l@{\qquad}r}
 \Play{\C{1}}{G} = G\:\vd &
 \Oppo{\C{1}}{H} = H\:\vd \\
@@ -144,167 +169,249 @@ But I don't like this semantics, because it's not compositional enough. Whilst p
 \section{control, response, traffic}
 
 \newcommand{\FAM}{\F{Fam}}
-\newcommand{\Party}[1]{\F{Party}\:#1}
+\newcommand{\Party}[1]{\D{Party}\:#1}
 
-Over the years, I've learned a lot from Peter (Hank) Hancock, particularly about using dependent types to characterize interaction. ``What would Hank do?'' I asked myself. Hank has a particular idiolect, which I may yet teach you, but I certainly don't expect to come as standard. The Hank in my head says that a \emph{party} to protocol $P:\Protocol$ is something in
+Over the years, I've learned a lot from Peter (Hank) Hancock, particularly about using dependent types to characterize interaction. ``What would Hank do?'' I asked myself. Hank has a particular idiolect, which I may yet teach you, but I certainly don't expect to come as standard. The Hank in my head says that a \emph{party} to protocol $X:\Protocol$ is something in
 \[
-\FAM^2\:\protocol{P}
+\FAM^2\:\protocol{X}
 \]
 where
 \[
-\FAM\:X = (I:\SET)\times (I\to X)
+\FAM\:(S:\SET) = (I:\SET)\times (I\to S)
 \]
-which is the \emph{fibrational} way to talk constructively about subsets of $X$, by picking them out as the image of a function from some domain $I$. The `squaring' in this instance indicates iterated composition (not the trigonometric usage, at all), so we get
+which is the \emph{fibrational} way to talk constructively about subsets of $S$, by picking them out as the image of a function from some domain $I$. The `squaring' in this instance indicates iterated composition (not the trigonometric usage, at all), so we get
 \[
-\Party{P} =
-(\mathit{Control}:\SET)\times \mathit{Control}\to (\mathit{Response}:\SET)\times \mathit{Response}\to \protocol{P}
+\FAM^2\:\protocol{X} =
+(\mathit{Control}:\SET)\times \mathit{Control}\to (\mathit{Response}:\SET)\times \mathit{Response}\to \protocol{X}
 \]
-That is, to be a party to a protocol $P$ is to have a set $\mathit{Control}$ of the choices you control --- what's in your mind? --- but then such a choice will determine a set $\mathit{Response}$ of the possible reactions from your antagonist --- what's out loud? --- over which you have no control. These are quite different sort of things. We expect $\mathit{Control}$ to be a higher-order type of internal cogitations to decide what to say, while $\mathit{Response}$ will be a first-order type of signal utterances you might hear out loud. What's in your antagonist's $\mathit{Control}$ should remain a secret. But between the two, how you decided what to say and what you heard, \emph{your perception} of the traffic should be determined.
 
-I gave a talk about this in a small seminar room at the University of Glasgow where I drew two enormous Easter Island heads on the whiteboard, with thought bubbles and speech bubbles to distinguish what was a cognitive process and what was an utterance. A year later, the heads were still on the board!
+But I want to say something slightly more subtle. I'm expecting
+$\mathit{Control}$ to be some higher-order type of cogitations,
+but the $\mathit{Response}$ had better be transmissible. Let us
+also do a bit of lambda-lifting. Let us say what bunch of stuff
+it is to be a party to an interaction delivering a value in $T$,
+which will become the traffic.
+\[
+\Party{(T:\SET)} = \begin{array}[t]{ll@{\::\:}l}
+  \{ & \F{Control} & \SET \\
+  ;  & \F{Response} & \F{Control}\to\Record \\
+  ;  & \F{traffic}  & (c : \F{Control}) \to
+  \record{\F{Response}\:c} \to T \\
+  \}\\
+\end{array}\]
+I gave a talk about this in a small seminar room at the University of Glasgow where I drew two enormous Easter Island heads on the whiteboard, with thought bubbles and speech bubbles to distinguish what was a cognitive process and what was an utterance. A year later, the heads were still on the board! What's important is that the $\F{traffic}$ field determines this party's \emph{perception} of the traffic, from what they \emph{thought} and what they \emph{heard}. The other party will experience the traffic from what's in their head, and what this party \emph{says}.
 
-Now, let us define
+If we're sensible, we should show that the parties admit tupling
+structure. The unit case is simple
+\[
+\F{P1}:\Party\:\D{1}
+\qquad
+\F{P1}\:.\F{Control} = \D{1};\quad
+\F{P1}\:.\F{Response}\:\vd = \C{1};\quad
+\F{P1}\:.\F{traffic}\:\vd\:\vd = \vd
+\]
+
+For pairing, we need
+\[
+\F{P\Upsigma}\:(A : \Party{S})\to
+(B : (s:S)\to\Party{(T\: s)})\to
+\Party{((s:S)\times T\:s)}
+\]
+It's in the $\F{Control}$ component that higher-order structure,
+like that function in your head, shows up.
+\[
+\F{P\Upsigma}\:A\:B\:.\F{Control} =
+\begin{array}[t]{@{}l}
+(\mathit{aC}:A\:.\F{Control})\times\\
+  (\mathit{aR}:A\:.\F{Response}\:\mathit{aC})\to\\
+  \lett{\mathit{at}}{A\:.\F{traffic}\:\mathit{aC}\:\mathit{aR}}
+    {\\ B\:\mathit{at}}
+\end{array}
+\]
+You get to \emph{think}
+about the $A$ response before you choose the $B$
+control. The response is the dependent pair of an $A$ response
+and a $B$ response to the $B$ control computed by your function.
+\[
+\F{P\Upsigma}\:A\:B\:.\F{Response}\:\pr{\mathit{aC}}{\mathit{bK}} =
+\begin{array}[t]{@{}l}
+  (\mathit{aR}:A\:.\F{Response}\:\mathit{aC})\times\\
+  \lett{\mathit{at}}{A\:.\F{traffic}\:\mathit{aC}\:\mathit{aR}}
+    {\\ B\:\mathit{at}.\F{Response}\:
+    (\mathit{bK}\:\mathit{aR})}
+\end{array}
+\]
+Finally, the traffic is the only thing that fits!
+\[
+\F{P\Upsigma}\:A\:B\:.\F{traffic}
+\:\pr{\mathit{aC}}{\mathit{bK}}
+\:\pr{\mathit{aR}}{\mathit{bR}} =\begin{array}[t]{@{}l}
+\lett{\mathit{at}}{A\:.\F{traffic}\:\mathit{aC}\:\mathit{aR}}
+{\\ \lett{\mathit{bt}}{B\:\mathit{at}\:.\F{traffic}\:
+    (\mathit{bK}\:\mathit{aR})\:\mathit{bR}}
+{\\ \pr{\mathit{at}}{\mathit{bt}}}}
+\end{array}\]
+
+
+\section{dramatis personae}
+
 \renewcommand{\Play}[1]{\F{Protagonist}\:#1}
 \renewcommand{\Oppo}[1]{\F{Antagonist}\:#1}
 \newcommand{\Eith}[1]{\F{-tagonist}\:#1}
-\[\Play{(P:\Protocol)}:\Party{P}\qquad \Oppo{(P:\Protocol)}:\Party{P}
-\]
-Of coursse, we shall have to say how to make them interact, but let me leave that to one side, for now.
+\newcommand{\Send}[1]{\F{P!}\:#1}
+\newcommand{\Recv}[1]{\F{P?}\:#1}
 
-We shall, of course have exchange of roles
-\[
-\Play{\op{P}} = \Oppo{P} \qquad
-\Oppo{\op{P}} = \Play{P}
+Now, let us define
+\[\Play{(P:\Protocol)}:\Party{\protocol{P}}\qquad \Oppo{(P:\Protocol)}:\Party{\protocol{P}}
 \]
+Of course, we shall have to say how to make them interact, but let me leave that to one side, for now.
 
-Central is what happens with signals.
-\[
-\Play{\send{S}} = \pr{S}{\lam{s}{\pr{\D{1}}{\lam{\_}{s}}}} \qquad
-\Oppo{\send{S}} = \pr{\D{1}}{\lam{\_}{\pr{S}{\lam{s}{s}}}}
+First, we shall need parties to send and receive individual signals
+\[\Send{(S:\Signal)} : \Party{\signal{S}}
+\qquad
+\Recv{(S:\Signal)} : \Party{\signal{S}}
 \]
-The protagonist controls the signal; the antagonist controls nothing!
-The protagonist expects a trivial acknowledgement; the antagonist expects the signal!
-Each of them can figure out the traffic: the protagonist chose it and the antagonist heard it.
-
-Stopping is easy:
-\[
-\Eith{\C{1}} = \pr{\D{1}}{\lam{\_}{\pr{\D{1}}{\lam{\_}{\vd}}}}
-\]
-
-Sequential composition is a more intricate tango. Let me say what it is, then talk you through it.
-\[\begin{array}{@{}l}
-\Eith{(\Sg{P}{Q})} = \\ \qquad\begin{array}[t]{@{}l}
-  \lett{\pr{\mathit{CP}}{\lam{c}{\pr{\mathit{RP}\:c}{\lam{r}{\mathit{tP}\:c\:r}}}}}
-       {\Eith{P}}
-  {\\ \lett{\lam{t}\pr{\mathit{CQ}\:t}{\lam{c}{\pr{\mathit{RQ}\:t\:c}{\lam{r}{\mathit{tQ}\:t\:c\:r}}}}}
-       {\lam{t}{\Eith{(Q\:t)}}}
-       {\\
-         \begin{array}[t]{@{}rl}
-           \red{\langle} & (\mathit{cp}:\mathit{CP})\times
-           (\mathit{rp}:\mathit{RP}\:\mathit{rp})\to
-           \mathit{CQ}\:(\mathit{tP}\:\mathit{cp}\:\mathit{rp})\\
-           \red{,} &
-           \begin{array}[t]{@{}l}
-             \lam{\pr{\mathit{cp}}{\mathit{fq}}}
-                 {\\
-                   \begin{array}[t]{@{}rl}
-                     \red{\langle} & (\mathit{rp}:\mathit{RP}\:\mathit{cp})\times
-                     \mathit{RQ}\:(\mathit{tP}\:\mathit{cp}\:\mathit{rp})\:
-                        (\mathit{fq}\:\mathit{rp})\\
-                     \red{,} & \lam{\pr{\mathit{rp}}{\mathit{rq}}}{\\
-                       & \pr{\mathit{tP}\:\mathit{cp}\:\mathit{rp}}
-                       {\mathit{tQ}\:(\mathit{tP}\:\mathit{cp}\:\mathit{rp})
-                         \:(\mathit{fq}\:\mathit{rp})\:\mathit{rq}}} \\
-                     \red{\rangle}
-                     \end{array}
-                 }
-           \end{array}
-           \\
-           \red{\rangle} 
-\end{array}  }}
-\end{array}
+Spot the difference!
+\[\begin{array}{l@{\qquad}l}
+\Send{S}\:.\F{Control} = \signal{S} &
+\Recv{S}\:.\F{Control} = \D{1} \\
+\Send{S}\:.\F{Response}\:s = \C{1} &
+\Recv{S}\:.\F{Response}\:\vd = \send{S} \\
+\Send{S}\:.\F{traffic}\:s\:\vd = s &
+\Recv{S}\:.\F{traffic}\:\vd\:s = s \\
 \end{array}\]
 
-So, before you say ``Get out of my face!'', let me tell an interleaved story that is very hard to write as a program, even if you build intuitionistic choice into your pattern matching notation (please do this!). For $\Sg{P}{Q}$
-\begin{enumerate}
-\item the Control begins by choosing the control, $\mathit{cp}$, for $P$
-\item the Response begins by asking for a $P$-response, $\mathit{rp}$, to $\mathit{cp}$
-\item we may now figure out the $P$-traffic, $t$ --- let $t$ be $\mathit{tP}\:\mathit{cp}\:\mathit{rp}$
-\item the Control continues by choosing a \emph{strategy}, depending on $\mathit{rp}$, for delivering the control, $\mathit{fq}\:\mathit{rp}$, for $Q\:t$
-\item the Response continues by asking for the $(Q\:t)$-response, $\mathit{rq}$ to that chosen control
-\item the traffic for the whole thing is the $P$-traffic paired with the $(Q\:t)$-traffic.
-\end{enumerate}
+Now we're good to go!
+\[\begin{array}{r@{\;=\;}l@{\qquad}r@{\;=\;}ll}
+\Play{\send{S}} & \Send{S} &
+\Oppo{\send{S}} & \Recv{S} \\
+\Play{\op{X}} & \Oppo{X} &
+\Oppo{\op{X}} & \Play{X} \\
+\multicolumn{4}{c}{\Eith{\C{1}} = \F{P1}}\\
+\multicolumn{4}{c}{\Eith{(\Sg{V}{W})} =
+    \F{P\Upsigma}\:(\Eith{V})\:(\Eith{(W\:\cdot)})}\\
+\end{array}\]
 
-Note that there is a function type in the control --- we choose the $Q$-control depending on the $P$-response --- but that the response type is resolutely a pair of responses, and thus ultimately a tuple of signals. It's the control type that tells you what the process is --- what's the function in your head? The response type is made of signals you can hear.
 
 Note also that the control types for protagonist and antagonist do not directly talk about each other. Rather, they use function types to abstract over whatever it is that they just have to put up with. As a consequence, any pair of protagonist and antagonist controls will be able to talk to each other effectively. Let's prove that.
 
 
 \section{we both remember it the same}
 
-It's quite tricky to even state what we need, here. Informally, given some $P:\Protocol$, we ask for the Controls for $\Play{P}$ and $\Oppo{P}$ --- what's in their heads --- and in return we promise to deliver both responses --- what they each say out loud --- and, moreover, to prove that both parties agree on what the traffic has been, even though they came by that information differently. The latter is crucial for $\Sg{Q}{R}$, because unless both parties agree on the traffic in the $Q$-interaction, they won't even realise they're participating in the same $R$-protocol.
-
-
 \newcommand{\EQ}{\mathrel{\blue{=}}}
-Let's say that in types:
+\newcommand{\refl}{\C{refl}}
+\newcommand{\heq}[4]{#3 \:\F{=\!\![ \N{#1} | \N{#2} ]\!\!=}\: #4}
+
+It's quite tricky to even state what we need, here. Informally, given some $X:\Protocol$, we ask for the Controls for $\Play{X}$ and $\Oppo{X}$ --- what's in their heads --- and in return we promise to deliver both responses --- what they each say out loud --- and, moreover, to prove that both parties agree on what the traffic has been, even though they came by that information differently. The latter is crucial for $\Sg{V}{W}$, because unless both parties agree on the traffic in the $V$-interaction, they won't even realise they're participating in the same $W$-protocol.
+
+We're going to need some equations, and some kind of heterogeneity is inevitable. We have
 \[
-\F{interact} : \begin{array}[t]{l}
-  (P:\Protocol)\to\\
-    \lett{\pr{\mathit{PC}}{\mathit{PK}}}{\Play{P}}{
-      \lett{\pr{\mathit{AC}}{\mathit{AK}}}{\Oppo{P}}{\\
-        (\mathit{pc}:\mathit{PC})\to(\mathit{ac}:\mathit{AC})\to\\
-        \lett{\pr{\mathit{PR}}{\mathit{pt}}}{\mathit{PK}\:\mathit{pc}}{
-          \lett{\pr{\mathit{AR}}{\mathit{at}}}{\mathit{AK}\:\mathit{ac}}
-               {\\
-                 (\pr{\mathit{pr}}{\mathit{ar}}:\mathit{PR}\times\mathit{AR})\times \\
-                 \mathit{pt}\:\mathit{pr} \EQ \mathit{at}\:\mathit{ar}
-                 }}
-    }}
-               \end{array}
+\refl : x\EQ x
 \]
-That's a bit of a mouthful, but it tells a story. Once we have the protocol, $P$, we can unpack the Control types $\mathit{PC}$ and $\mathit{AC}$ from both parties. Now we can ask for the Control strategies for both, which then lets us unpack the Response types and the traffic functions. We promise to deliver the pair of responses (``raperorum'', in a word from the late great Stanley Baxter) and show that the parties agree on what the traffic was.
+but let's also have
+\[
+\heq{P}{(q : x_0\EQ x_1)}{(p_0:P\:x_0)}{(p_1:P\:x_1)} : \SET
+\]
+which computes to an ordinary equation when $q$ is trivial
+\[
+\heq{P}{\refl}{p_0}{p_1} \;\;=\;\; p_0\EQ p_1 
+\]
+
+\newcommand{\prq}[2]{\F{\langle\N{#1},\N{#2}\rangle}}
+One useful thing we can do with this machinery is plug pairs together:
+\[
+\prq{(a_q : a_0 = a_1)}{(b_q : \heq{B}{a_q}{b_0}{b_1})} :
+\pr{a_0}{b_0} \EQ \pr{a_1}{b_1} \qquad
+\prq{\refl}{\refl} = \refl
+\]
+
+In general, we might be working with protocols which are only \emph{provably} equal.
+\[\begin{array}{@{}l}
+\F{interact} :\\
+\qquad\begin{array}[t]{@{}l}
+  (X, Y:\Protocol)\to (Q:X\EQ Y) \to\\
+  (\mathit{cX}:\Play{X}\:.\F{Control}) \to
+  (\mathit{cY}:\Oppo{Y}\:.\F{Control}) \to\\
+  (\pr{\mathit{rX}}{\mathit{rY}}:\Play{X}\:.\F{Response}\:\mathit{cX} \times
+                                 \Oppo{Y}\:.\F{Response}\:\mathit{cY}) \times\\
+    \heq{\protocol{\cdot}}{Q}
+        {\Play{X}\:.\F{traffic}\:\mathit{cX}\:\mathit{rX}}
+        {\Oppo{Y}\:.\F{traffic}\:\mathit{cY}\:\mathit{rY}}
+\end{array}
+\end{array}
+\]
+By working upto some equation $Q$, we're allowing for the way each party
+perceives the protocol we're running apparently splays apart. Our first move is the
+good kind of conversion therapy. We $\F{J}$ the splay away and work only on the diagonal.
+\[\begin{array}{@{}l}
+\F{interact}\:X\:\_\:\refl\:\mathit{cPX}\:\mathit{cAX} =\\
+\qquad(? : \begin{array}[t]{@{}l}
+  (\pr{\mathit{rPX}}{\mathit{rAX}}
+  \begin{array}[t]{@{}r@{\:}l}:&\Play{X}\:.\F{Response}\:\mathit{cPX}\\
+    \times & \Oppo{X}\:.\F{Response}\:\mathit{cAX}) \times
+    \end{array}\\
+    \Play{X}\:.\F{traffic}\:\mathit{cPX}\:\mathit{rPX} \EQ
+    \Oppo{X}\:.\F{traffic}\:\mathit{cAX}\:\mathit{rAX})
+    \end{array}
+\end{array}\]
 
 The crucial base case is for sending:
 \[
-\F{interact}\:\send{S}\:s\:\vd = \pr{\pr{\vd}{s}}{\C{refl}}
+\F{interact}\:\send{S}\:\_\:\refl\:s\:\vd = \pr{\pr{\vd}{s}}{\C{refl}}
 \]
 The signal that is the protagonist's Control becomes the response to the Antagonist, so they both agree it's the same signal.
 
 To switch roles, we conjugate by swapping:
-\[
-\F{interact}\:\op{P}\:\mathit{pc}\:\mathit{ac} =
-\lett{\pr{\pr{\mathit{ar}}{\mathit{pr}}}{q}}{\F{interact}\:P\:\mathit{ac}\:\mathit{pc}}
-     {\pr{\pr{\mathit{pr}}{\mathit{ar}}}{\F{sym}\:q}}
-\]
+\[\begin{array}{@{}l}
+\F{interact}\:\op{X}\:\_\:\refl\:\mathit{cPX}\:\mathit{cAX} = \\ \quad
+ \begin{array}[t]{@{}l}
+\lett{\pr{\pr{\mathit{rAX}}{\mathit{rPX}}}{q}}{\F{interact}\:X\:\_\:\refl\:\mathit{cAX}\:\mathit{cPX}}
+     {\\ \pr{\pr{\mathit{rPX}}{\mathit{rAX}}}{\F{sym}\:q}}
+     \end{array}
+\end{array}\]
+where $\F{sym}$ proves symmetry of $\EQ$.
 
 Doing nothing is easy:
 \[
-\F{interact}\:\C{1}\:\vd\:\vd = \pr{\pr{\vd}{\vd}}{\C{refl}}
+\F{interact}\:\C{1}\:\_\:\refl\:\vd\:\vd = \pr{\pr{\vd}{\vd}}{\C{refl}}
 \]
 
-The fun case is, of course, the sequential composition. Let's make a start
+The fun case is, of course, the sequential composition. We start with our feet together
 \[
 \begin{array}{@{}l}
-  \F{interact}\:(\Sg{Q}{R})\:\pr{\mathit{pQc}}{\mathit{pQk}}\:\pr{\mathit{aQc}}{\mathit{aQk}} =\\
+  \F{interact}\:(\Sg{V}{W})\:\_\refl\:\pr{\mathit{cPV}}{\mathit{kPW}}\:\pr{\mathit{cAV}}{\mathit{kAW}} =\\
   \quad
 \begin{array}[t]{@{}l}
-  \lett{\pr{\pr{\mathit{pQr}}{\mathit{aQr}}}{\mathit{Qq}}}{\F{interact}\:Q\:\mathit{pQc}\:\mathit{aQc}}
-       {\\ \lett{\mathit{pRc}}{\mathit{pQk}\:\mathit{pQr}}{\lett{\mathit{aRc}}{\mathit{aQk}\:\mathit{aQr}}{\\ ?
-             }}}}
+  \lett{\pr{\pr{\mathit{rPV}}{\mathit{rAV}}}{\mathit{qV}}}{\F{interact}\:V\:\_\:\refl\:\mathit{cPV}\:\mathit{cAV}}
+       {\\ ?}
 \end{array}
 \end{array}\]
-We've got to the middle. We unpacked the Contols for the $Q$-protocol, run the $Q$-interaction
-and collected the $Q$-responses. Moreover, feeding those responses to the continuation strategies yields Controls for the $R$-protocol each party imagines come next, depending each on their own perception of the $Q$-traffic. However, we have a \emph{proof}, $\mathit{Qq}$, that those perceptions coincide. On paper, we carry on
+We've got to the middle, and we have
 \[
-\quad
-\begin{array}[t]{@{}l}
-  \lett{\pr{\pr{\mathit{pRr}}{\mathit{aRr}}}{\mathit{Rq}}}{\F{interact}\:(R\:\_)\:\mathit{pRc}\:\mathit{aRc}}
-       {\\ \pr{\pr{\pr{\mathit{pQr}}{\mathit{pRr}}}{\pr{\mathit{aQr}}{\mathit{aRr}}}}
-            {\pr{\mathit{Qq}}{\mathit{Rq}}}}}}
-\end{array}
+\mathit{qV}: \Play{V}\:.\F{traffic}\:\mathit{cPV}\mathit{rPV} \EQ
+             \Oppo{V}\:.\F{traffic}\:\mathit{cAV}\mathit{rAV} 
 \]
-But that's making imaginary equality reflection do a lot of heavy lifting. In an intensional type theory, you have genuine intensional splay between the $R$-protocols the two parties think they're playing at, and you have to use $\mathit{Qq}$, to achieve the good kind of conversion therapy, where you $\F{J}$ the splay away.
-
-I'm trying to find my Agda code for this. I know it exists somewhere. I found something somewhere. The good move is to use the path-over-a-path kind of heterogeneous equality where you bookkeep the reason why your far-apart feet are joined at the waist. You interact in accordance with provably equal protocols and deliver a heterogeneous equation (over the protocol equation) that you get equal traffic.
+which is to say that both parties have intensionally distinct but provably equal perceptions of the $V$ traffic. But this is the splay we prepared for! Let us carry on!
+\[
+\begin{array}{@{}l}
+  \F{interact}\:(\Sg{V}{W})\:\_\refl\:\pr{\mathit{cPV}}{\mathit{kPW}}\:\pr{\mathit{cAV}}{\mathit{kAW}} =\\
+  \quad
+\begin{array}[t]{@{}l}
+  \lett{\pr{\pr{\mathit{rPV}}{\mathit{rAV}}}{\mathit{qV}}}{\F{interact}\:V\:\_\:\refl\:\mathit{cPV}\:\mathit{cAV}}
+       {\\ \lett{\pr{\pr{\mathit{rPW}}{\mathit{rAW}}}{\mathit{qW}}}
+         {\\ \qquad \F{interact}\:(W\:\_)\:(W\:\_)\:(W\mathop{\F{\$}}\mathit{qV})\:
+              (\mathit{kPW}\:\mathit{rPV})\:(\mathit{kAW}\:\mathit{rPV})}
+         {\\ \pr{\pr{\pr{\mathit{rPV}}{\mathit{rPW}}}{\pr{\mathit{rAV}}{\mathit{rAW}}}}
+                {\F{\langle\N{\mathit{qV}},\N{\F{deindex}\:W\:\mathit{qW}}\rangle}}}}
+\end{array}
+\end{array}\]
+where we use that equality is a congruence
+\[(f:S\to T)\mathop{\F{\$}}(q:x\EQ y) : f\:x \EQ f\:y\]
+and that we may shuffle congruence around in the dependent equality:
+\[
+\F{deindex}\:W\:(\mathit{qW} :
+\heq{\protocol{\cdot}}{W\mathop{\F{\$}}\mathit{qV}}{\mathit{tPW}}{\mathit{tAW}}) :
+\heq{\protocol{W\:\cdot}}{\mathit{qV}}{\mathit{tPW}}{\mathit{tAW}}
+\]
 
 \end{document}
