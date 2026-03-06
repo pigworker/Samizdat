@@ -14,6 +14,10 @@
 \newcommand{\lett}[3]{\mathrm{let}\;#1 = #2\;\mathrm{in}\; #3}
 \newcommand{\lam}[2]{\red{\uplambda} #1.\:#2}
 
+\newcommand{\SET}{\D{\mathsf{Set}}}
+\newcommand{\vd}{\C{\langle\rangle}}
+\newcommand{\pr}[2]{\red{\langle\N{#1},\N{#2}\rangle}}
+
 
 \begin{document}
 \title{fevered scribblings\\ from an unkempt mind}
@@ -22,6 +26,73 @@
 
 \tableofcontents
 \newpage
+
+\chapter{beautiful abstract syntax trees are readily definable\\(episode 1)}
+
+\newcommand{\TmS}{\D{\mathbb{T}}}
+\newcommand{\Sort}{\D{\mathbb{S}}}
+\newcommand{\sone}{\C{1}}
+\newcommand{\stimes}{\mathop{\red{\times}}}
+\newcommand{\stm}[1]{\red{'}#1}
+\newcommand{\shook}{\mathop{\red{\supset}}}
+\newcommand{\cfrom}{\mathrel{\blue{\leftarrow}}}
+\newcommand{\vni}{\mathrel{\blue{\ni}}}
+\newcommand{\Bwd}[1]{\D{Bwd}\:#1}
+\newcommand{\tm}{\mathrel{\blue{\vdash}}}
+\newcommand{\va}[1]{\C{\char35}#1}
+\newcommand{\cn}[2]{#1\red{-\!\langle\N{#2}\rangle}}
+
+I anticipate multiple episodes, so I can let these ideas evolve. I'm interested in first-class notions of syntax description, from which useful equipment can be constructed mechanically. Syntax with binding is a topic rich in opinion, and I am learning sufficiently rapidly that I spend a great deal of energy disagreeing with myself.
+
+Today, I'll start from a set of \emph{term sorts}, 
+\[
+\TmS : \SET
+\]
+being the syntactic categories of some mutually recursive syntax, and grow that into a set
+\[\Sort:\SET\]
+of sorts for syntactic substructure. We'll need all the term sorts, and tupling.
+\[
+\stm{(T : \TmS)\qquad \sone : \Sort \qquad (R : \Sort)\stimes(S : \Sort) : \Sort }
+\]
+And we'll also need binding. I'm going to make the temporary simplifying assumption
+that all term sorts may potentially admit binding, but we will want to refine that some other time.
+We can specify that we want a binding, as follows:
+\[
+(T:\TmS)\shook (S:\Sort) : \Sort
+\]
+
+The plan is then to specify a syntax by giving a proof relevant relation
+\[
+(T:\TmS)\cfrom (S:\Sort) : \SET
+\]
+which tells you the \emph{constructors} --- all the ways to make a term of term sort $T$ from a substructure of sort $S$.
+
+\newcommand{\snoc}{\mathop{\red{\mbox{-}\!,}}}
+\newcommand{\slam}{\red{\char92}}
+Suppose we have, as contexts, backward lists of terms sorts, with a membership relation
+\[
+(\Gamma : \Bwd{\TmS}) \vni (T : \TmS)
+\]
+then we can give a type of well scoped and sorted terms:
+\[
+(\Gamma : \Bwd{\TmS}) \tm (S:\Sort) : \SET
+\]
+Here are the bits and pieces. Terms are made from variables and constructors.
+\[
+\va{(i : \Gamma\vni T)} : \Gamma \tm \stm{T}
+\qquad
+\cn{(c : T\cfrom S)}{(s:\Gamma \tm S)} : \Gamma \tm \stm{T}
+\]
+Tupling is achieved in the obvious way; binding extends the context.
+\[
+\vd:\Gamma\tm\sone \qquad
+\pr{(r:\Gamma\tm R)}{(s:\Gamma\tm S)} : \Gamma\tm R\stimes S
+  \qquad \slam(\Gamma\snoc T \tm S) : \Gamma\tm T\shook S
+\]
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \chapter{depending on the traffic}
 
@@ -46,8 +117,6 @@ To remark, briefly, upon dependent linear types, it's a basic Curry-Howard-ist p
 \newcommand{\protocol}[1]{\green{\ensuremath{\llbracket \N{#1} \rrbracket_{\Protocol}}}}
 \newcommand{\Record}{\D{\mathbb{R}}}
 \newcommand{\record}[1]{\green{\ensuremath{\llbracket \N{#1} \rrbracket_{\Record}}}}
-\newcommand{\SET}{\D{\mathsf{Set}}}
-\newcommand{\vd}{\C{\langle\rangle}}
 \newcommand{\send}[1]{\C{!}#1}
 \newcommand{\op}[1]{#1^{\C{\bot}}}
 \newcommand{\Sg}[2]{\C{\Upsigma}\:#1\:#2}
@@ -108,7 +177,6 @@ So, we've said what it is to \emph{be} a protocol, but what is it to be a proces
 \newcommand{\Play}[2]{\F{Protagonist}\:#1\:#2}
 \newcommand{\Oppo}[2]{\F{Antagonist}\:#1\:#2}
 \newcommand{\interact}[3]{\F{synthesis}\:#1\:#2\:#3}
-\newcommand{\pr}[2]{\red{\langle\N{#1},\N{#2}\rangle}}
 
 My first attempt to interpret protocols as types of processes gave a kind of proof-relevant weakest-precondition semantics, where each of the parties to protocol $P$ has some \emph{goal} $G:\protocol{P}\to\SET$ expressing what, to them, about the traffic in a $P$ interaction would make them $H$ for happy. We thus need to define (mutually) the parts in our drama
 \[\begin{array}{l}
@@ -440,8 +508,6 @@ In general, to extend the notio of dependent session type I've been talking abou
 As a consequence, we now see that Control types for recursive sessions must allow arbitrary interleavings of $\upmu$ and $\upnu$, in a hierarchy which we know from Julian Bradfield does not collapse. No current implementation of type theory gives effective support for these gnarly modes of recursion. The game's a bogey!
 
 (And indeed, the type theorists in MSP know we're not going to lure Clemens Kupke into our clutches until he can have modal $\upmu$-calculus fun, and we're nowhere near making that happen.)
-
-
 
 
 \end{document}
