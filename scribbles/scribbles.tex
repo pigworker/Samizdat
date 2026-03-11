@@ -27,7 +27,8 @@
 \tableofcontents
 \newpage
 
-\chapter{beautiful abstract syntax trees are readily definable\\(episode 1)}
+\chapter{beautiful abstract syntax trees\\are readily definable\\(part I)}
+\chaptermark{BASTARD (I)}
 
 \newcommand{\TmS}{\D{\mathbb{T}}}
 \newcommand{\Sort}{\D{\mathbb{S}}}
@@ -36,7 +37,7 @@
 \newcommand{\stm}[1]{\red{'}#1}
 \newcommand{\shook}{\mathop{\red{\supset}}}
 \newcommand{\cfrom}{\mathrel{\blue{\leftarrow}}}
-\newcommand{\vni}{\mathrel{\blue{\ni}}}
+\newcommand{\vni}{\mathrel{\green{\ni}}}
 \newcommand{\Bwd}[1]{\D{Bwd}\:#1}
 \newcommand{\tm}{\mathrel{\blue{\vdash}}}
 \newcommand{\va}[1]{\C{\char35}#1}
@@ -52,7 +53,7 @@ being the syntactic categories of some mutually recursive syntax, and grow that 
 \[\Sort:\SET\]
 of sorts for syntactic substructure. We'll need all the term sorts, and tupling.
 \[
-\stm{(T : \TmS)\qquad \sone : \Sort \qquad (R : \Sort)\stimes(S : \Sort) : \Sort }
+\stm{(T : \TmS):\Sort \qquad \sone : \Sort \qquad (R : \Sort)\stimes(S : \Sort) : \Sort }
 \]
 And we'll also need binding. I'm going to make the temporary simplifying assumption
 that all term sorts may potentially admit binding, but we will want to refine that some other time.
@@ -67,7 +68,8 @@ The plan is then to specify a syntax by giving a proof relevant relation
 \]
 which tells you the \emph{constructors} --- all the ways to make a term of term sort $T$ from a substructure of sort $S$.
 
-\newcommand{\snoc}{\mathop{\red{\mbox{-}\!,}}}
+\newcommand{\emp}{\red{\varepsilon}}
+\newcommand{\snoc}{\mathop{\red{,}}}
 \newcommand{\slam}{\red{\char92}}
 Suppose we have, as contexts, backward lists of terms sorts, with a membership relation
 \[
@@ -83,13 +85,146 @@ Here are the bits and pieces. Terms are made from variables and constructors.
 \qquad
 \cn{(c : T\cfrom S)}{(s:\Gamma \tm S)} : \Gamma \tm \stm{T}
 \]
-Tupling is achieved in the obvious way; binding extends the context.
+Tupling is achieved in the obvious way.
 \[
 \vd:\Gamma\tm\sone \qquad
 \pr{(r:\Gamma\tm R)}{(s:\Gamma\tm S)} : \Gamma\tm R\stimes S
-  \qquad \slam(\Gamma\snoc T \tm S) : \Gamma\tm T\shook S
+\]
+Binding extends the context.
+\[
+\vd:\Gamma\tm\sone \qquad
+\slam(b:\Gamma\snoc T \tm S) : \Gamma\tm T\shook S
 \]
 
+For example, if you take $\TmS = \D{1}$ and ensure
+\[
+\C{lam}:\vd \cfrom \vd\shook\stm{\vd}
+\qquad
+\C{app}:\vd\cfrom\stm{\vd}\stimes\stm{\vd}
+\]
+you get the well scoped untyped $\lambda$-terms.
+
+
+\section{thinnings --- context embeddings}
+
+\newcommand{\thin}{\mathrel{\blue{\subseteq}}}
+\newcommand{\thi}{\C{1}}
+\newcommand{\tho}{\C{0}}
+``Cross out \emph{this} and write \emph{that}!'' is one of my slogans, for this and that. E.g., cross out 2 and write Prop. But here, I want to look again at binomial coefficients, except not so combinatorially. Cross out Nat and write Set! Don't just count the bloody things: say what they are and what they're for!
+
+In this case, binomial coefficients, or `thinnings' to their friends, can account for how everything in scope in one context stays in scope if you make the context bigger by inserting more stuff wherever you want. (Note that although one tends to insert stuff at the local end, you need only then go under a binder to find stuff even more local than the insertion, so you can't get away with mere concatenation.) Thinning types relate the `wee end' to the `big end', and they show in what way the big end is more.
+\[
+(\Gamma : \Bwd{X})\thin(\Delta : \Bwd{X}) : \SET
+\]
+Thinning values are bit vectors, as long as the big end, and whose ones count the wee end.
+\[
+\emp : \emp\thin\emp \qquad
+(\theta : \Gamma\thin\Delta)\thi : \Gamma\snoc x \thin \Delta\snoc x \qquad
+(\theta : \Gamma\thin\Delta)\tho : \Gamma \thin \Delta\snoc y
+\]
+
+\newcommand{\thii}{\C{\upiota}}
+\newcommand{\thoo}{\C{\upomega}}
+\newcommand{\thc}{\mathop{\green{;}}}
+Thinnings form a category, with the empty context as initial object. Feel free to say `semisimplicial' over and over as fast as you can.
+\[
+\thoo:\emp\thin\Gamma \qquad
+\thii:\Gamma\thin\Gamma \qquad
+(\theta:\Gamma\thin\Delta)\thc(\phi:\Delta\thin\Xi):\Gamma\thin\Xi
+\]
+This $\thoo$ is all the $\tho$s ($0$ in 2's complement binary) and this $\thii$ is all the $thi$s ($-1$ in 2's complement binary).
+The composition is a kind of substitution: you substitute $\theta$'s bits for $\phi$'s $\thi$s.
+\[
+\emp\thc\emp = \emp \qquad
+\theta b\thc\phi\thi = (\theta\thc\phi)b \qquad
+\theta\thc\phi\tho = (\theta\thc\phi)\tho
+\]
+Exercise: construct a monoid on the integers whose operation is thinning composition, with neutral element $-1$.
+
+One way to implement our $\Gamma\vni T$ representation of informative de Bruijn indices is as
+\[\emp\snoc T\thin\Gamma\]
+and I rather recommend doing this, because it then becomes clear (to us, if not to present day proof assistants) that thinnings act on terms.
+\newcommand{\tha}{\mathop{\green{\blacktriangleleft}}}
+\[
+(t:\Gamma\tm S)\tha(\theta:\Gamma\thin\Delta) : \Delta\tm S
+\]
+The key observations, plain as your knows, are that
+\[
+\va{(i:\emp\snoc T\thin\Gamma)}:\Gamma\tm \stm{T} \qquad
+(\va{i})\tha\theta = \va{(i\thc\theta)}
+\]
+keeps $\Gamma\tm S$ \emph{strictly positive} in $\Gamma$, ensuring that action by postcomposition is achievable, and that context extension $\Gamma\snoc T$ is an action on thinning \emph{objects} which extends functorially to thinning \emph{arrows} as $\theta\thi$.
+\[
+(\slam b)\tha\theta = \slam(b\tha\theta\thi)
+\]
+The rest is structural.
+\[
+\vd\tha\theta = \vd \qquad
+\pr{r}{s}\tha\theta = \pr{r\tha\theta}{s\tha\theta} \qquad
+(\cn{c}{s})\tha\theta = \cn{c}{s\tha\theta}
+\]
+
+
+\section{structural term actions}
+
+\newcommand{\tma}{\mathrel{\D{\triangleright}}}
+We have just seen a special case of what it is to be a structural action on terms. The message is that if you know how to cope with variable binding and usage, everything else is easy. So, let's define, \emph{coinductively}, what it is to be an action from $\Gamma$ to $\Delta$:
+\[
+(\Gamma:\Bwd\TmS)\tma(\Delta:\Bwd\TmS) : \SET
+\]
+where the idea is that we are \emph{always} ready to act on variables, and \emph{always} ready to go under binders
+\[\Gamma\tma\Delta =
+\{\F{va}:\forall T.\Gamma\vni T \to \Delta\tm \stm{T};\;
+\F{ex}:\forall T.\Gamma\snoc T\tma\Delta\snoc T
+\}
+\]
+Let's write action as juxtaposition:
+\[
+(t:\Gamma\tm S)(\alpha:\Gamma\tma\Delta) : \Delta\tm S
+\]
+where we now have
+\[
+(\va{i})\alpha = \va{(\alpha\:.\F{va}\:i)}\qquad
+(\slam b)\alpha = \slam(b(\alpha\:.\F{ex}))
+\]
+and, as before,
+\[
+\vd\alpha = \vd \qquad
+\pr{r}{s}\alpha = \pr{r\alpha}{s\alpha} \qquad
+(\cn{c}{s})\alpha = \cn{c}{s\alpha}
+\]
+
+\newcommand{\act}[1]{\green{\overline{\N{#1}}}}
+Thinnings $\theta$ yield actions $\act{\theta}$
+\[
+\act{(\theta:\Gamma\thin\Delta)} : \Gamma\tma\Delta
+\qquad
+\act{\theta} = \{\F{va} = \va{(\cdot\thc\theta)};\:\F{ex} = \act{\theta\thi}\}
+\]
+
+So do substitutions. What is a substitution? Well, every context yields a sort by left-nested tupling. I propose to write that operation silently. So now $\Delta\tm\Gamma$ is the type of left-nested tuples with a $\Delta\tm T$ for every $\Gamma\vni T$, also known as a \emph{simultaneous} substitution.
+
+We shall need to \emph{project} from these tuples. I propose first to \emph{select} from them, using binomial coefficients to do some choosing!
+\[
+(\theta:\Xi\thin\Gamma)(\sigma:\Delta\tm\Gamma) : \Delta\tm\Xi
+\]
+where
+\[
+\emp\vd = \vd \quad
+(\theta\thi)\pr{\sigma}{t} = \pr{\theta\sigma}{t} \qquad
+(\theta\tho)\pr{\sigma}{t} = \theta\sigma
+\]
+and now we may define projection as the unpacking of a singleton selection.
+\newcommand{\prj}{\mathop{\green{\F{!}}}}
+\[
+(\sigma:\Delta\tm\Gamma)\prj(i:\Gamma\vni T) : \Delta\tm T \qquad
+\sigma\prj i = \lett{\pr{\vd}{t}}{i\sigma}{t}
+\]
+We are now in a position to make substitutions act.
+\[
+\act{(\sigma:\Delta\tm\Gamma)} : \Gamma\tma\Delta \qquad
+\act{\sigma} = \{\F{va} = \sigma\prj\cdot;\;\F{ex} = \sigma\act{(\thii\tho)}\}
+\]
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -508,6 +643,13 @@ In general, to extend the notio of dependent session type I've been talking abou
 As a consequence, we now see that Control types for recursive sessions must allow arbitrary interleavings of $\upmu$ and $\upnu$, in a hierarchy which we know from Julian Bradfield does not collapse. No current implementation of type theory gives effective support for these gnarly modes of recursion. The game's a bogey!
 
 (And indeed, the type theorists in MSP know we're not going to lure Clemens Kupke into our clutches until he can have modal $\upmu$-calculus fun, and we're nowhere near making that happen.)
+
+
+\chapter{\label{chapter:presheaves}presheaves on purpose}
+
+We love to define indexed inductive families, but so far, we have given thought only to index \emph{values}. We can transport indexed data only across \emph{equations} between indices. For Heaven's sake, cross out Set and write Cat, already! Ask what structure on indices the thus indexed sets respects. Ensure that we construct \emph{functors} into Set, i.e., \emph{presheaves} in useful and interesting ways.
+
+We can write down a \emph{universe} of descriptions for indexed datatypes. Now let's try to write down a universe of descriptions for presheaves-by-construction.
 
 
 \end{document}
